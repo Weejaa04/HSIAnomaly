@@ -162,7 +162,8 @@ def fuse_pa2e_for_inference(model: PA2E) -> PA2E:
 # ============================= BENCHMARK ================================
 
 def benchmark_food_type(food_type, base_dir='AnomalyonFood/Dataset',
-                        batch_size=512, phase1_epochs=20, phase2_epochs=20):
+                        batch_size=512, phase1_epochs=20, phase2_epochs=20,
+                        retrain=True):
     print(f"\n{'='*70}\nBENCHMARKING: {food_type}\n{'='*70}")
     base = f'{base_dir}/{food_type}'
 
@@ -202,9 +203,20 @@ def benchmark_food_type(food_type, base_dir='AnomalyonFood/Dataset',
     print(f'  Partial Decoders:  {params_decoders:,}')
     print(f'  TOTAL:             {params_total:,}\n')
 
-    train_phase1(model, train_loader, num_epochs=phase1_epochs, lr=1e-3)
+    model_dir = f"./models/pa2e"
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = f"{model_dir}/{food_type}.pt"
     model_ft = PA2EFT(model).to(device)
-    train_phase2(model_ft, train_loader, num_epochs=phase2_epochs, lr=1e-4, alpha=0.1)
+
+    if not retrain and os.path.exists(model_path):
+        print(f"\n=== Loading Model ({model_path}) ===")
+        model_ft.load_state_dict(torch.load(model_path, map_location=device))
+    else:
+        train_phase1(model, train_loader, num_epochs=phase1_epochs, lr=1e-3)
+        model_ft = PA2EFT(model).to(device)
+        train_phase2(model_ft, train_loader, num_epochs=phase2_epochs, lr=1e-4, alpha=0.1)
+        print(f"Saving model to {model_path}...")
+        torch.save(model_ft.state_dict(), model_path)
 
     def _eval(mdl, tag):
         mdl.eval()
@@ -274,6 +286,7 @@ Examples:
     parser.add_argument('--phase1-epochs', type=int, default=20)
     parser.add_argument('--phase2-epochs', type=int, default=20)
     parser.add_argument('--output-dir',    type=str, default='./results')
+    parser.add_argument('--retrain',       type=str, choices=['yes', 'no'], default='yes', help='Whether to retrain the model (default: yes)')
     args = parser.parse_args()
 
     if not args.food or args.food == ['all']:
@@ -298,6 +311,7 @@ Examples:
                 ft, batch_size=args.batch_size,
                 phase1_epochs=args.phase1_epochs,
                 phase2_epochs=args.phase2_epochs,
+                retrain=(args.retrain == 'yes'),
             )
         except Exception as e:
             print(f"❌ Error on {ft}: {e}")

@@ -1,7 +1,7 @@
 SEED_DICT = {
-    'Almond':      8088,
-    'Pistachio':   5100,
-    'GarlicStems': 7975,
+    'Almond':      42,
+    'Pistachio':   42,
+    'GarlicStems': 42,
 }
 
 

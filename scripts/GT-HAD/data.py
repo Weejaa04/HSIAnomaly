@@ -42,7 +42,7 @@ def load_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', devi
     gt_raw = np.load(f'{base}/Test/label.npy')  # (H, W)
 
     H, W, B = test_data.shape
-    gt = (gt_raw != 2).astype(np.float32)  # binary: anomaly=1, background=0
+    gt = (gt_raw != 2)  # binary: anomaly=1, background=0
 
     # Convert test image to (1, B, H, W) tensor for the network
     img_np  = test_data.transpose(2, 0, 1)   # (B, H, W)

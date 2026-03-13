@@ -1,0 +1,53 @@
+{
+  "Almond": {
+    "food_type": "Almond",
+    "parameters": 47339,
+    "original_model": {
+      "roc_auc": 0.9810057873406718,
+      "pr_auc": 0.8703170573789463,
+      "inference_time": 2.010671,
+      "peak_vram_mib": 203.62
+    },
+    "fused_model": {
+      "roc_auc": 0.9810719364664975,
+      "pr_auc": 0.8719746882658455,
+      "inference_time": 1.834042,
+      "peak_vram_mib": 204.49
+    },
+    "speedup": 1.0963058643149939
+  },
+  "Pistachio": {
+    "food_type": "Pistachio",
+    "parameters": 47339,
+    "original_model": {
+      "roc_auc": 0.9805435644058252,
+      "pr_auc": 0.8762994623184028,
+      "inference_time": 2.001422,
+      "peak_vram_mib": 203.62
+    },
+    "fused_model": {
+      "roc_auc": 0.9804882947433841,
+      "pr_auc": 0.8769578576513317,
+      "inference_time": 1.809879,
+      "peak_vram_mib": 204.49
+    },
+    "speedup": 1.105831936831136
+  },
+  "GarlicStems": {
+    "food_type": "GarlicStems",
+    "parameters": 47339,
+    "original_model": {
+      "roc_auc": 0.99346537734429,
+      "pr_auc": 0.928240593078138,
+      "inference_time": 2.051615,
+      "peak_vram_mib": 203.62
+    },
+    "fused_model": {
+      "roc_auc": 0.9936703977936734,
+      "pr_auc": 0.9284360891466992,
+      "inference_time": 1.822994,
+      "peak_vram_mib": 204.49
+    },
+    "speedup": 1.1254096283366812
+  }
+}

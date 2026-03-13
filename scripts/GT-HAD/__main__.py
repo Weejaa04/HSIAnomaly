@@ -46,7 +46,8 @@ def benchmark_food_type(food_type: str,
                         num_iters: int = 150,
                         search_iter: int = 25,
                         batch_size: int = 64,
-                        lr: float = 1e-3) -> dict:
+                        lr: float = 1e-3,
+                        retrain: bool = True) -> dict:
     print(f"\n{'='*70}\nBENCHMARKING: {food_type}\n{'='*70}")
 
     seed = SEED_DICT.get(food_type, 42)
@@ -87,39 +88,52 @@ def benchmark_food_type(food_type: str,
     search_matrix = torch.zeros(data_num, B, block_size, block_size, device=device)
     search_index  = torch.arange(0, data_num, device=device)
 
-    print(f'=== Training ({num_iters} iterations) ===')
-    start = time.time()
+    model_dir = f"./models/GT-HAD"
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = f"{model_dir}/{food_type}.pt"
+    if not retrain and os.path.exists(model_path):
+        print(f"\n=== Loading Model ({model_path}) ===")
+        checkpoint = torch.load(model_path, map_location=device)
+        net.load_state_dict(checkpoint['net'])
+        match_vec = checkpoint['match_vec'].to(device)
+        train_time = 0.0
+    else:
+        print(f'=== Training ({num_iters} iterations) ===')
+        start = time.time()
 
-    for iteration in range(1, num_iters + 1):
-        net.train()
-        search_flag = (iteration % search_iter == 0) and (iteration != num_iters)
-        iter_loss = 0.0
+        for iteration in range(1, num_iters + 1):
+            net.train()
+            search_flag = (iteration % search_iter == 0) and (iteration != num_iters)
+            iter_loss = 0.0
 
-        for batch_data in data_loader:
-            optimizer.zero_grad()
-            net_gt    = batch_data['block_gt'].to(device)
-            net_input = batch_data['block_input'].to(device)
-            block_idx = batch_data['index'].to(device)
+            for batch_data in data_loader:
+                optimizer.zero_grad()
+                net_gt    = batch_data['block_gt'].to(device)
+                net_input = batch_data['block_input'].to(device)
+                block_idx = batch_data['index'].to(device)
 
-            net_out = net(net_input, block_idx=block_idx, match_vec=match_vec)
+                net_out = net(net_input, block_idx=block_idx, match_vec=match_vec)
+                if search_flag:
+                    search_matrix[block_idx] = net_out.detach()
+
+                loss = mse(net_out, net_gt)
+                loss.backward()
+                optimizer.step()
+                iter_loss += loss.item()
+
             if search_flag:
-                search_matrix[block_idx] = net_out.detach()
+                match_vec     = torch.zeros(data_num, device=device)
+                search_back   = block_fold(search_matrix.detach(), data_set.padding, H, W)
+                match_vec     = block_search(search_back.detach(), match_vec, search_index)
 
-            loss = mse(net_out, net_gt)
-            loss.backward()
-            optimizer.step()
-            iter_loss += loss.item()
+            avg_loss = iter_loss / len(data_loader)
+            print(f'  Iter {iteration:>3}/{num_iters}  loss={avg_loss:.6f}')
 
-        if search_flag:
-            match_vec     = torch.zeros(data_num, device=device)
-            search_back   = block_fold(search_matrix.detach(), data_set.padding, H, W)
-            match_vec     = block_search(search_back.detach(), match_vec, search_index)
+        train_time = time.time() - start
+        print(f'\nTraining time: {train_time:.2f}s')
 
-        avg_loss = iter_loss / len(data_loader)
-        print(f'  Iter {iteration:>3}/{num_iters}  loss={avg_loss:.6f}')
-
-    train_time = time.time() - start
-    print(f'\nTraining time: {train_time:.2f}s')
+        print(f"Saving model to {model_path}...")
+        torch.save({'net': net.state_dict(), 'match_vec': match_vec}, model_path)
 
     # ===== Inference =====
     print('\n=== Inference ===')
@@ -197,6 +211,7 @@ Examples:
     parser.add_argument('--batch-size',  type=int, default=64,   help='Batch size (default: 64)')
     parser.add_argument('--lr',          type=float, default=1e-3, help='Learning rate (default: 1e-3)')
     parser.add_argument('--output-dir',  type=str, default='./results', help='Output directory (default: ./results)')
+    parser.add_argument('--retrain',     type=str, choices=['yes', 'no'], default='yes', help='Whether to retrain the model (default: yes)')
     args = parser.parse_args()
 
     if not args.food or args.food == ['all']:
@@ -223,6 +238,7 @@ Examples:
                 search_iter=args.search_iter,
                 batch_size=args.batch_size,
                 lr=args.lr,
+                retrain=(args.retrain == 'yes'),
             )
         except Exception as e:
             print(f"❌ Error on {ft}: {e}")

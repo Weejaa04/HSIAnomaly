@@ -1,0 +1,29 @@
+{
+  "Almond": {
+    "food_type": "Almond",
+    "parameters": 277248,
+    "roc_auc": 0.6999100265829367,
+    "pr_auc": 0.057389815586129364,
+    "inference_time": 0.4683544635772705,
+    "peak_vram_mib": 6804.97,
+    "training_time": 2472.246486902237
+  },
+  "Pistachio": {
+    "food_type": "Pistachio",
+    "parameters": 277248,
+    "roc_auc": 0.7749305798573911,
+    "pr_auc": 0.04984439940296077,
+    "inference_time": 0.4571523666381836,
+    "peak_vram_mib": 6804.19,
+    "training_time": 2470.9248208999634
+  },
+  "GarlicStems": {
+    "food_type": "GarlicStems",
+    "parameters": 277248,
+    "roc_auc": 0.9143001166447313,
+    "pr_auc": 0.0914906603415919,
+    "inference_time": 0.4627084732055664,
+    "peak_vram_mib": 6804.19,
+    "training_time": 2470.8883821964264
+  }
+}

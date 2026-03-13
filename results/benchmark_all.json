@@ -4,134 +4,39 @@
       "food_type": "Almond",
       "parameters": 47339,
       "original_model": {
-        "roc_auc": 0.9810057873406718,
-        "pr_auc": 0.8703170573789463,
-        "inference_time": 2.010671,
+        "roc_auc": 0.9850969303634688,
+        "pr_auc": 0.85075126867012,
+        "inference_time": 2.117714,
         "peak_vram_mib": 203.62
       },
       "fused_model": {
-        "roc_auc": 0.9810719364664975,
-        "pr_auc": 0.8719746882658455,
-        "inference_time": 1.834042,
+        "roc_auc": 0.9850609670773329,
+        "pr_auc": 0.8508498338405559,
+        "inference_time": 1.895944,
         "peak_vram_mib": 204.49
       },
-      "speedup": 1.0963058643149939
-    },
-    "Pistachio": {
-      "food_type": "Pistachio",
-      "parameters": 47339,
-      "original_model": {
-        "roc_auc": 0.9805435644058252,
-        "pr_auc": 0.8762994623184028,
-        "inference_time": 2.001422,
-        "peak_vram_mib": 203.62
-      },
-      "fused_model": {
-        "roc_auc": 0.9804882947433841,
-        "pr_auc": 0.8769578576513317,
-        "inference_time": 1.809879,
-        "peak_vram_mib": 204.49
-      },
-      "speedup": 1.105831936831136
-    },
-    "GarlicStems": {
-      "food_type": "GarlicStems",
-      "parameters": 47339,
-      "original_model": {
-        "roc_auc": 0.99346537734429,
-        "pr_auc": 0.928240593078138,
-        "inference_time": 2.051615,
-        "peak_vram_mib": 203.62
-      },
-      "fused_model": {
-        "roc_auc": 0.9936703977936734,
-        "pr_auc": 0.9284360891466992,
-        "inference_time": 1.822994,
-        "peak_vram_mib": 204.49
-      },
-      "speedup": 1.1254096283366812
+      "speedup": 1.1169707544104677
     }
   },
-  "pa2e": {
+  "PA2E": {
     "Almond": {
       "food_type": "Almond",
       "parameters": 346872,
       "original_model": {
-        "roc_auc": 0.9822640015193537,
-        "pr_auc": 0.8588215404045281,
-        "inference_time": 2.508751,
+        "roc_auc": 0.9659226485295619,
+        "pr_auc": 0.7482845369416535,
+        "inference_time": 3.831168,
         "peak_vram_mib": 75.81
       },
       "fused_model": {
-        "roc_auc": 0.9822639053836373,
-        "pr_auc": 0.8588212303266596,
-        "inference_time": 1.287228,
+        "roc_auc": 0.9659227694744955,
+        "pr_auc": 0.7482841502594545,
+        "inference_time": 2.33842,
         "peak_vram_mib": 76.95
       },
-      "speedup": 1.9489562066704578
-    },
-    "Pistachio": {
-      "food_type": "Pistachio",
-      "parameters": 346872,
-      "original_model": {
-        "roc_auc": 0.9767570395804545,
-        "pr_auc": 0.8667439890519736,
-        "inference_time": 2.58474,
-        "peak_vram_mib": 75.81
-      },
-      "fused_model": {
-        "roc_auc": 0.9767566828888923,
-        "pr_auc": 0.8667439506150075,
-        "inference_time": 1.315243,
-        "peak_vram_mib": 76.95
-      },
-      "speedup": 1.9652185945867038
-    },
-    "GarlicStems": {
-      "food_type": "GarlicStems",
-      "parameters": 346872,
-      "original_model": {
-        "roc_auc": 0.9984417816047062,
-        "pr_auc": 0.9478568436485199,
-        "inference_time": 2.596394,
-        "peak_vram_mib": 75.81
-      },
-      "fused_model": {
-        "roc_auc": 0.998441721623774,
-        "pr_auc": 0.9478567286212121,
-        "inference_time": 1.266869,
-        "peak_vram_mib": 76.95
-      },
-      "speedup": 2.0494573629949113
+      "speedup": 1.6383575234560086
     }
   },
-  "GT-HAD": {
-    "Almond": {
-      "food_type": "Almond",
-      "parameters": 277248,
-      "roc_auc": 0.6999100265829367,
-      "pr_auc": 0.057389815586129364,
-      "inference_time": 0.4683544635772705,
-      "peak_vram_mib": 6804.97,
-      "training_time": 2472.246486902237
-    },
-    "Pistachio": {
-      "food_type": "Pistachio",
-      "parameters": 277248,
-      "roc_auc": 0.7749305798573911,
-      "pr_auc": 0.04984439940296077,
-      "inference_time": 0.4571523666381836,
-      "peak_vram_mib": 6804.19,
-      "training_time": 2470.9248208999634
-    },
-    "GarlicStems": {
-      "food_type": "GarlicStems",
-      "parameters": 277248,
-      "roc_auc": 0.9143001166447313,
-      "pr_auc": 0.0914906603415919,
-      "inference_time": 0.4627084732055664,
-      "peak_vram_mib": 6804.19,
-      "training_time": 2470.8883821964264
-    }
-  }
+  "GT-HAD": {},
+  "BockNet": {}
 }

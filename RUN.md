@@ -4,7 +4,7 @@ All commands should be run from the **project root** (`hsi-foodanomaly/`).
 
 ## `benchmark.py` — Run Everything at Once
 
-Runs all three architectures in sequence, saves per-arch JSON, and prints a combined summary table.
+Runs all four architectures in sequence, saves per-arch JSON, and prints a combined summary table.
 
 ```bash
 # All architectures, all food types
@@ -31,6 +31,7 @@ python benchmark.py --output-dir ./results/run1
 | `results/ours.json` | Conv1D results |
 | `results/pa2e.json` | FC results |
 | `results/gt-had.json` | GT-HAD results |
+| `results/bocknet.json` | BockNet results |
 | `results/benchmark_all.json` | All architectures combined |
 
 ---
@@ -41,6 +42,8 @@ python benchmark.py --output-dir ./results/run1
 |--------|-------------|
 | `scripts/ours` | PA2E with **Conv1D** partial encoders + Deep k-NN inference |
 | `scripts/pa2e` | PA2E with **FC** partial encoders + linear layer fusion |
+| `scripts/GT-HAD` | Graph Transformer (GT-HAD) |
+| `scripts/bocknet` | Blind-Block Reconstruction Network with a Guard Window |
 
 ---
 
@@ -141,6 +144,40 @@ python -m scripts.GT-HAD --output-dir ./results/gt-had
 
 ---
 
+## `scripts/bocknet` — BockNet
+
+> Blind-Block Reconstruction Network with a Guard Window for Hyperspectral Anomaly Detection.
+
+```bash
+# All food types (default)
+python -m scripts.bocknet
+
+# Single food type
+python -m scripts.bocknet --food Almond
+
+# Multiple food types
+python -m scripts.bocknet --food Almond Pistachio
+
+# Custom hyperparameters
+python -m scripts.bocknet --food Almond --epochs 3000 --lr 1e-4 --blindspot 15
+
+# Custom output directory
+python -m scripts.bocknet --output-dir ./results/bocknet
+```
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--food` | all | Food type(s): `Almond`, `Pistachio`, `GarlicStems` |
+| `--epochs` | `3000` | Training epochs |
+| `--lr` | `1e-4` | Learning rate |
+| `--blindspot` | `15` | Blindspot guard window size |
+| `--retrain` | `yes` | Retrain model if present (`yes` or `no`) |
+| `--output-dir` | `./results` | Directory for `bocknet.json` results file |
+
+---
+
 ## Dataset Structure
 
 The dataset can be acquired here: [IEEE DataPort - Anomaly Detection in Hyperspectral Imaging for Food Safety Inspection](https://ieee-dataport.org/documents/anomaly-detection-hyperspectral-imaging-food-safety-inspection)
@@ -162,3 +199,5 @@ Results are saved as JSON to `--output-dir`:
 
 - `ours.json` — ROC-AUC, PR-AUC, inference time for original and Conv+BN-fused model
 - `pa2e.json` — ROC-AUC, PR-AUC, inference time for original and Linear-fused model
+- `gt-had.json` — ROC-AUC, PR-AUC, inference time for GT-HAD
+- `bocknet.json` — ROC-AUC, PR-AUC, inference time for BockNet

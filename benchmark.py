@@ -19,16 +19,18 @@ import time
 import traceback
 
 ALL_FOOD_TYPES  = ['Almond', 'Pistachio', 'GarlicStems']
-ALL_ARCHS       = ['ours', 'pa2e', 'GT-HAD']
+ALL_ARCHS       = ['ours', 'PA2E', 'GT-HAD', 'BockNet']
 ARCH_MODULE_MAP = {
     'ours':   'scripts.ours.__main__',
-    'pa2e':   'scripts.pa2e.__main__',
+    'PA2E':   'scripts.PA2E.__main__',
     'GT-HAD': 'scripts.GT-HAD.__main__',
+    'BockNet':'scripts.bocknet.__main__',
 }
 ARCH_RESULT_FILE = {
     'ours':   'ours.json',
-    'pa2e':   'pa2e.json',
+    'PA2E':   'pa2e.json',
     'GT-HAD': 'gt-had.json',
+    'BockNet':'bocknet.json',
 }
 
 
@@ -101,7 +103,7 @@ def main():
 Examples:
   python benchmark.py
   python benchmark.py --food Almond
-  python benchmark.py --only pa2e GT-HAD
+  python benchmark.py --only PA2E GT-HAD
   python benchmark.py --skip ours --output-dir ./results/run1
         """,
     )
@@ -145,7 +147,9 @@ Examples:
     if args.phase2_epochs: pa2e_ours_kw['phase2_epochs'] = args.phase2_epochs
     gthad_kw = {}
     if args.num_iters: gthad_kw['num_iters'] = args.num_iters
-    extra_kwargs = {'ours': pa2e_ours_kw, 'pa2e': pa2e_ours_kw, 'GT-HAD': gthad_kw}
+    bocknet_kw = {}
+    # pass
+    extra_kwargs = {'ours': pa2e_ours_kw, 'PA2E': pa2e_ours_kw, 'GT-HAD': gthad_kw, 'BockNet': bocknet_kw}
 
     print(f"\n{'='*80}")
     print(f"  HSI Food Anomaly Benchmark")

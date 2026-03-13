@@ -209,27 +209,33 @@ def benchmark_food_type(food_type, base_dir='AnomalyonFood/Dataset',
     def _eval(mdl, tag):
         mdl.eval()
         all_scores, all_labels = [], []
+        if torch.cuda.is_available():
+            torch.cuda.synchronize(device)
+            torch.cuda.reset_peak_memory_stats(device)
         start = datetime.datetime.now()
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f'{tag} inference', leave=False):
                 x, lbl = batch
                 all_scores.append(mdl.compute_anomaly_score(x.to(device)).cpu())
                 all_labels.append(lbl)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize(device)
         elapsed = (datetime.datetime.now() - start).total_seconds()
+        peak_vram_mib = torch.cuda.max_memory_allocated(device) / 1024 ** 2 if torch.cuda.is_available() else 0.0
         scores = torch.cat(all_scores).numpy()
         labels = (torch.cat(all_labels).numpy() != 2).astype(int)
         roc = roc_auc_score(labels, scores)
         pr  = average_precision_score(labels, scores)
-        print(f'{tag}: ROC-AUC={roc:.4f}, PR-AUC={pr:.4f}, time={elapsed:.4f}s')
-        return roc, pr, elapsed
+        print(f'{tag}: ROC-AUC={roc:.4f}, PR-AUC={pr:.4f}, time={elapsed:.4f}s, Peak VRAM={peak_vram_mib:.1f} MiB')
+        return roc, pr, elapsed, peak_vram_mib
 
     print('\n--- Evaluating original model ---')
-    roc_o, pr_o, t_o = _eval(model_ft, 'Original')
+    roc_o, pr_o, t_o, vram_o = _eval(model_ft, 'Original')
 
     print('\n--- Applying layer fusion ---')
     fused_ft = fuse_pa2e_for_inference(model_ft).to(device)
     print('--- Evaluating fused model ---')
-    roc_f, pr_f, t_f = _eval(fused_ft, 'Fused')
+    roc_f, pr_f, t_f, vram_f = _eval(fused_ft, 'Fused')
 
     speedup = t_o / t_f if t_f > 0 else float('inf')
     print(f"\n{'='*70}\nResults for {food_type}")
@@ -237,15 +243,17 @@ def benchmark_food_type(food_type, base_dir='AnomalyonFood/Dataset',
     print(f"{'ROC-AUC':<25} {roc_o:>20.4f} {roc_f:>20.4f}")
     print(f"{'PR-AUC':<25} {pr_o:>20.4f} {pr_f:>20.4f}")
     print(f"{'Time (s)':<25} {t_o:>20.4f} {t_f:>20.4f}")
+    print(f"{'Peak VRAM (MiB)':<25} {vram_o:>20.1f} {vram_f:>20.1f}")
     print(f"{'Speedup':<25} {'1.00x':>20} {speedup:>20.2f}x\n{'='*70}\n")
 
     return {
         'food_type': food_type,
         'parameters': params_total,
-        'original_model': {'roc_auc': float(roc_o), 'pr_auc': float(pr_o), 'inference_time': t_o},
-        'fused_model':    {'roc_auc': float(roc_f), 'pr_auc': float(pr_f), 'inference_time': t_f},
+        'original_model': {'roc_auc': float(roc_o), 'pr_auc': float(pr_o), 'inference_time': t_o, 'peak_vram_mib': round(vram_o, 2)},
+        'fused_model':    {'roc_auc': float(roc_f), 'pr_auc': float(pr_f), 'inference_time': t_f, 'peak_vram_mib': round(vram_f, 2)},
         'speedup': speedup,
     }
+
 
 
 # ============================= CLI ======================================

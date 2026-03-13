@@ -126,7 +126,10 @@ def benchmark_food_type(food_type: str,
     net.eval()
     infer_loader   = DataLoader(data_set, batch_size=batch_size, shuffle=False, drop_last=False)
     infer_res_list = []
-    infer_start    = time.time()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize(device)
+        torch.cuda.reset_peak_memory_stats(device)
+    infer_start = time.time()
 
     with torch.no_grad():
         for data in infer_loader:
@@ -137,7 +140,10 @@ def benchmark_food_type(food_type: str,
             infer_res = avgpool(infer_res)
             infer_res_list.append(infer_res)
 
+    if torch.cuda.is_available():
+        torch.cuda.synchronize(device)
     infer_time    = time.time() - infer_start
+    peak_vram_mib = torch.cuda.max_memory_allocated(device) / 1024 ** 2 if torch.cuda.is_available() else 0.0
     infer_res_out = torch.cat(infer_res_list, dim=0)
     infer_res_back = block_fold(infer_res_out.detach(), data_set.padding, H, W)
     residual_np   = img2mask(infer_res_back)
@@ -149,7 +155,7 @@ def benchmark_food_type(food_type: str,
     roc_auc = roc_auc_score(gt_flat, res_flat)
     pr_auc  = average_precision_score(gt_flat, res_flat)
 
-    print(f'ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}  Inference time={infer_time:.4f}s')
+    print(f'ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}  Inference time={infer_time:.4f}s  Peak VRAM={peak_vram_mib:.1f} MiB')
 
     print(f"\n{'='*70}\nResults for {food_type}")
     print(f"{'Metric':<25} {'Value':>20}\n{'-'*70}")
@@ -157,6 +163,7 @@ def benchmark_food_type(food_type: str,
     print(f"{'PR-AUC':<25} {pr_auc:>20.4f}")
     print(f"{'Inference Time (s)':<25} {infer_time:>20.4f}")
     print(f"{'Training Time (s)':<25} {train_time:>20.4f}")
+    print(f"{'Peak VRAM (MiB)':<25} {peak_vram_mib:>20.1f}")
     print(f"{'='*70}\n")
 
     return {
@@ -165,6 +172,7 @@ def benchmark_food_type(food_type: str,
         'roc_auc':        float(roc_auc),
         'pr_auc':         float(pr_auc),
         'inference_time': infer_time,
+        'peak_vram_mib':  round(peak_vram_mib, 2),
         'training_time':  train_time,
     }
 

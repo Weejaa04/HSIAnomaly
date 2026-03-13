@@ -2,7 +2,40 @@
 
 All commands should be run from the **project root** (`hsi-foodanomaly/`).
 
-## Architectures
+## `benchmark.py` — Run Everything at Once
+
+Runs all three architectures in sequence, saves per-arch JSON, and prints a combined summary table.
+
+```bash
+# All architectures, all food types
+python benchmark.py
+
+# Specific food types
+python benchmark.py --food Almond Pistachio
+
+# Select specific architectures
+python benchmark.py --only ours pa2e
+python benchmark.py --skip GT-HAD
+
+# Override epochs/iters
+python benchmark.py --phase1-epochs 10 --phase2-epochs 50 --num-iters 100
+
+# Custom output directory
+python benchmark.py --output-dir ./results/run1
+```
+
+### Output
+
+| File | Contents |
+|------|----------|
+| `results/ours.json` | Conv1D results |
+| `results/pa2e.json` | FC results |
+| `results/gt-had.json` | GT-HAD results |
+| `results/benchmark_all.json` | All architectures combined |
+
+---
+
+## Individual Architectures
 
 | Script | Description |
 |--------|-------------|

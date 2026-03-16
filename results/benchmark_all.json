@@ -1,42 +1,142 @@
 {
-  "ours": {
+  "BockNet": {
     "Almond": {
-      "food_type": "Almond",
-      "parameters": 47339,
-      "original_model": {
-        "roc_auc": 0.9850969303634688,
-        "pr_auc": 0.85075126867012,
-        "inference_time": 2.117714,
-        "peak_vram_mib": 203.62
-      },
-      "fused_model": {
-        "roc_auc": 0.9850609670773329,
-        "pr_auc": 0.8508498338405559,
-        "inference_time": 1.895944,
-        "peak_vram_mib": 204.49
-      },
-      "speedup": 1.1169707544104677
+      "roc_auc": 0.928857295102005,
+      "pr_auc": 0.4888397712488668,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.2830531597137451,
+      "n_params": 736576,
+      "max_vram_gb": 5.1528
+    },
+    "Pistachio": {
+      "roc_auc": 0.8227585123050395,
+      "pr_auc": 0.34782930510955523,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.1481647491455078,
+      "n_params": 736576,
+      "max_vram_gb": 5.1526
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9288279135978195,
+      "pr_auc": 0.3022993531626048,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.14401531219482422,
+      "n_params": 736576,
+      "max_vram_gb": 5.1526
     }
   },
-  "PA2E": {
+  "our": {
     "Almond": {
-      "food_type": "Almond",
-      "parameters": 346872,
-      "original_model": {
-        "roc_auc": 0.9659226485295619,
-        "pr_auc": 0.7482845369416535,
-        "inference_time": 3.831168,
-        "peak_vram_mib": 75.81
-      },
-      "fused_model": {
-        "roc_auc": 0.9659227694744955,
-        "pr_auc": 0.7482841502594545,
-        "inference_time": 2.33842,
-        "peak_vram_mib": 76.95
-      },
-      "speedup": 1.6383575234560086
+      "roc_auc": 0.972070162438458,
+      "pr_auc": 0.8577173859829836,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.315794,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
+    },
+    "Pistachio": {
+      "roc_auc": 0.9670282917000731,
+      "pr_auc": 0.8228972698859286,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.283177,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9954983101412656,
+      "pr_auc": 0.9335503000533971,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.270324,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
     }
   },
-  "GT-HAD": {},
-  "BockNet": {}
+  "pa2e": {
+    "Almond": {
+      "roc_auc": 0.899008810371693,
+      "pr_auc": 0.5197593051035652,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.64509,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    },
+    "Pistachio": {
+      "roc_auc": 0.8706540538091324,
+      "pr_auc": 0.6360999557865271,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.621135,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9971076163583366,
+      "pr_auc": 0.9237086577120895,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 2.657907,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    }
+  },
+  "gthad": {
+    "Almond": {
+      "roc_auc": 0.8658776956235885,
+      "pr_auc": 0.6141857724459875,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 3.7890260219573975,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    },
+    "Pistachio": {
+      "roc_auc": 0.9533040564252515,
+      "pr_auc": 0.6624331384596207,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 3.5926499366760254,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9828253166746266,
+      "pr_auc": 0.7560006333036517,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 3.6256320476531982,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    }
+  }
 }

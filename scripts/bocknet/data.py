@@ -16,14 +16,13 @@ def calibrate_hsi(data: np.ndarray, white_ref_path: str, dark_ref_path: str) -> 
 def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', device=None):
     """Load, calibrate and return (img_var, gt, H, W, B) for a food type.
     Note: BockNet expects inputs in (1, B, H, W).
+    
+    Also returns spatial masks for the Global Full-Image Model paradigm:
+    - train_mask: Y[50:200]  (exclusive zone for weight updates)
+    - val_mask:   Y[300:350] (for validation loss only)
     """
     base = f'{base_dir}/{food_type}'
 
-    # For BockNet, we might just train on the Test image as an unsupervised anomaly detection task,
-    # or follow the exact convention of whether Train data is used.
-    # The original BockNet main.py just loads a single test image `image = input_data['data']` and uses it as both train and test.
-    # We will use the Test image (`data.hdr` and `label.npy`) as the target for blind-spot reconstruction.
-    
     test_data = calibrate_hsi(
         load_hsi_data(f'{base}/Test/data.hdr'),
         f'{base}/Test/WHITEREF.hdr',
@@ -43,4 +42,12 @@ def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', devic
         img_var = img_var.to(device)
     img_var = img_var.unsqueeze(0)  # (1, B, H, W)
 
-    return img_var, gt, H, W, B
+    # Create spatial masks for the Global Full-Image Model paradigm
+    train_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
+    train_mask[50:200, :] = 1.0
+    
+    val_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
+    val_mask[300:350, :] = 1.0
+
+    return img_var, gt, H, W, B, train_mask, val_mask
+

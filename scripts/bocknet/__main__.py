@@ -22,13 +22,12 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 from torch.utils.data import DataLoader
 
 from .model import BockNet
-
 from .data import get_food_data
+from .utils import SEED_DICT, UniversalEarlyStopping
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 ALL_FOOD_TYPES = ['Almond', 'Pistachio', 'GarlicStems']
-SEED_DICT = {'Almond': 42, 'Pistachio': 42, 'GarlicStems': 42} # Adjust if needed
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if not torch.cuda.is_available():
@@ -84,21 +83,31 @@ def TensorToHSI(img):
 
 def benchmark_food_type(food_type: str,
                         base_dir: str = 'AnomalyonFood/Dataset',
-                        epochs: int = 3000,
                         lr: float = 1e-4,
                         blindspot: int = 15,
                         nch_ker: int = 64,
                         weight_decay: float = 1e-5,
                         lossm: str = 'l1',
+                        dry_run: bool = False,
                         retrain: bool = True) -> dict:
                         
     print(f"\n{'='*70}\nBENCHMARKING: {food_type}\n{'='*70}")
+
+    # For dry run, use tight constraints to complete quickly while testing full pipeline
+    if dry_run:
+        patience = 1  # Stop after first epoch without improvement
+        min_delta = 1e-8  # Very tight threshold
+        max_epochs_cap = 2  # Hard cap at 2 epochs for dry run
+    else:
+        patience = 50
+        min_delta = 1e-4
+        max_epochs_cap = 1000  # No effective cap for normal runs
 
     seed = SEED_DICT.get(food_type, 42)
     set_seed(seed)
 
     # ===== Load data =====
-    img_tensor, gt, H, W, B = get_food_data(food_type, base_dir, device=device)
+    img_tensor, gt, H, W, B, train_mask, val_mask = get_food_data(food_type, base_dir, device=device)
     print(f'Image: ({H}, {W}, {B})  |  Anomaly pixels: {int(gt.sum())} / {H*W}')
 
     # ===== Model =====
@@ -115,7 +124,7 @@ def benchmark_food_type(food_type: str,
         criterion = nn.MSELoss().to(device)
 
     # ===== Training =====
-    model_dir = f"./models/BockNet"
+    model_dir = f"./weights/BockNet"
     os.makedirs(model_dir, exist_ok=True)
     model_path = f"{model_dir}/{food_type}.pt"
     
@@ -124,22 +133,44 @@ def benchmark_food_type(food_type: str,
         net.load_state_dict(torch.load(model_path, map_location=device))
         train_time = 0.0
     else:
-        print(f'=== Training ({epochs} epochs) ===')
+        print(f'=== Training with Early Stopping (patience={patience}, min_delta={min_delta}) ===')
         start = time.time()
         
-        net.train()
-        for epoch in range(1, epochs + 1):
+        # Initialize early stopping monitor
+        early_stopper = UniversalEarlyStopping(patience=patience, min_delta=min_delta)
+        
+        epoch = 0
+        while not early_stopper.early_stop and epoch < max_epochs_cap:
+            epoch += 1
+            
+            # Training pass - apply mask to prevent learning from validation region
+            net.train()
             optimizer.zero_grad()
             outputs = net(img_tensor)
-            loss = criterion(outputs, img_tensor)
-            loss.backward()
+            
+            # Calculate loss only on Train Block (Y[50:200])
+            raw_loss = criterion(outputs, img_tensor)
+            masked_train_loss = (raw_loss * train_mask.unsqueeze(0).unsqueeze(0)).mean()
+            
+            masked_train_loss.backward()
             optimizer.step()
             
-            if epoch % 100 == 0 or epoch == epochs:
-                print(f'  Epoch {epoch:>4}/{epochs}  loss={loss.item():.6f}')
+            # Validation pass - evaluate only on Validation Block (Y[300:350])
+            net.eval()
+            with torch.inference_mode():
+                val_outputs = net(img_tensor)
+                val_raw_loss = criterion(val_outputs, img_tensor)
+                val_loss = (val_raw_loss * val_mask.unsqueeze(0).unsqueeze(0)).mean()
+            
+            if epoch % 10 == 0:
+                print(f'  Epoch {epoch:>4}  train_loss={masked_train_loss.item():.6f}  val_loss={val_loss.item():.6f}')
+            
+            # Check early stopping based on validation loss
+            early_stopper(val_loss.item())
                 
         train_time = time.time() - start
         print(f'\nTraining time: {train_time:.2f}s')
+        print(f'Epochs trained: {epoch}')
 
         print(f"Saving model to {model_path}...")
         torch.save(net.state_dict(), model_path)
@@ -181,13 +212,12 @@ def benchmark_food_type(food_type: str,
     print(f"{'='*70}\n")
 
     return {
-        'food_type':      food_type,
-        'parameters':     params_total,
         'roc_auc':        float(roc_auc),
         'pr_auc':         float(pr_auc),
-        'inference_time': infer_time,
-        'peak_vram_mib':  round(peak_vram_mib, 2),
-        'training_time':  train_time,
+        'detectmap_shape': list(detectmap.shape),
+        'infer_time_sec': infer_time,
+        'n_params':       params_total,
+        'max_vram_gb':    round(peak_vram_mib / 1024, 4),
     }
 
 
@@ -206,10 +236,10 @@ Examples:
     )
     parser.add_argument('--food',        nargs='*', default=None,
                         help='Food type(s): Almond, Pistachio, GarlicStems (default: all)')
-    parser.add_argument('--epochs',      type=int, default=3000, help='Training epochs (default: 3000)')
     parser.add_argument('--lr',          type=float, default=1e-4, help='Learning rate (default: 1e-4)')
     parser.add_argument('--blindspot',   type=int, default=15, help='Blindspot window size (default: 15)')
     parser.add_argument('--output-dir',  type=str, default='./results', help='Output directory (default: ./results)')
+    parser.add_argument('--dry-run', '-dr', action='store_true', help='Train for 1 epoch only to validate the script')
     parser.add_argument('--retrain',     type=str, choices=['yes', 'no'], default='yes', help='Whether to retrain the model (default: yes)')
     args = parser.parse_args()
 
@@ -224,7 +254,7 @@ Examples:
             return
 
     print(f"\n📊 Food types: {', '.join(food_types)}")
-    print(f"   Epochs={args.epochs}  LR={args.lr}  Blindspot={args.blindspot}")
+    print(f"   LR={args.lr}  Blindspot={args.blindspot}")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -233,9 +263,9 @@ Examples:
         try:
             all_results[ft] = benchmark_food_type(
                 ft,
-                epochs=args.epochs,
                 lr=args.lr,
                 blindspot=args.blindspot,
+                dry_run=args.dry_run,
                 retrain=(args.retrain == 'yes'),
             )
         except Exception as e:

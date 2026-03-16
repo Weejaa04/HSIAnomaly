@@ -19,18 +19,18 @@ import time
 import traceback
 
 ALL_FOOD_TYPES  = ['Almond', 'Pistachio', 'GarlicStems']
-ALL_ARCHS       = ['ours', 'PA2E', 'GT-HAD', 'BockNet']
+ALL_ARCHS       = ['BockNet', 'our', 'pa2e', 'gthad']
 ARCH_MODULE_MAP = {
-    'ours':   'scripts.ours.__main__',
-    'PA2E':   'scripts.PA2E.__main__',
-    'GT-HAD': 'scripts.GT-HAD.__main__',
     'BockNet':'scripts.bocknet.__main__',
+    'our': 'scripts.our.__main__',
+    'pa2e': 'scripts.pa2e.__main__',
+    'gthad': 'scripts.gthad.__main__',
 }
 ARCH_RESULT_FILE = {
-    'ours':   'ours.json',
-    'PA2E':   'pa2e.json',
-    'GT-HAD': 'gt-had.json',
     'BockNet':'bocknet.json',
+    'our': 'our.json',
+    'pa2e': 'pa2e.json',
+    'gthad': 'gthad.json',
 }
 
 
@@ -46,7 +46,9 @@ def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict) -
     arch_results = {}
     for ft in food_types:
         try:
-            result = bench_fn(ft, **extra_kwargs.get(arch, {}))
+            # Merge architecture-specific kwargs with common kwargs
+            kwargs = {**extra_kwargs.get('common', {}), **extra_kwargs.get(arch, {})}
+            result = bench_fn(ft, **kwargs)
             arch_results[ft] = result
         except Exception as e:
             print(f"\n❌ [{arch}] Error on {ft}: {e}")
@@ -56,7 +58,16 @@ def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict) -
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, ARCH_RESULT_FILE[arch])
     with open(out_path, 'w') as f:
-        json.dump(arch_results, f, indent=2)
+        # Handle numpy serialization
+        def convert_numpy(obj):
+            import numpy as np
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, (np.floating, np.integer)):
+                return float(obj) if isinstance(obj, np.floating) else int(obj)
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+        
+        json.dump(arch_results, f, indent=2, default=convert_numpy)
     print(f"\n✅ [{arch}] Results saved → {out_path}")
 
     return arch_results
@@ -83,7 +94,7 @@ def print_summary(all_results: dict):
             r = all_results[arch].get(ft)
             if r is None:
                 row += f"  {'N/A':>{col}} {'N/A':>{col}}"
-            elif 'original_model' in r:          # ours / pa2e (fused pair)
+            elif 'original_model' in r:          # ours / our (fused pair)
                 roc = r['original_model']['roc_auc']
                 pr  = r['original_model']['pr_auc']
                 row += f"  {roc:>{col}.4f} {pr:>{col}.4f}"
@@ -103,8 +114,10 @@ def main():
 Examples:
   python benchmark.py
   python benchmark.py --food Almond
-  python benchmark.py --only PA2E GT-HAD
-  python benchmark.py --skip ours --output-dir ./results/run1
+  python benchmark.py --only GT-HAD
+  python benchmark.py --skip GT-HAD --output-dir ./results/run1
+  python benchmark.py --dry-run                  # train only 1 epoch/iter per architecture
+  python benchmark.py --dry-run --retrain no     # load saved models without retraining
         """,
     )
     parser.add_argument('--food',        nargs='*', default=None,
@@ -113,15 +126,14 @@ Examples:
                         metavar='ARCH',  help=f'Run only these architectures: {ALL_ARCHS}')
     parser.add_argument('--skip',        nargs='*', default=None,
                         metavar='ARCH',  help='Skip these architectures')
+    parser.add_argument('--dry-run', '-dr',
+                        action='store_true',
+                        help='Train for 1 iteration/epoch only to validate the script works')
+    parser.add_argument('--retrain',
+                        type=str, choices=['yes', 'no'], default='yes',
+                        help='Retrain models or load saved ones (default: yes)')
     parser.add_argument('--output-dir',  default='./results',
                         help='Directory for JSON results (default: ./results)')
-    # Per-architecture epoch/iter overrides
-    parser.add_argument('--phase1-epochs', type=int, default=None,
-                        help='Override phase1 epochs for ours/pa2e')
-    parser.add_argument('--phase2-epochs', type=int, default=None,
-                        help='Override phase2 epochs for ours/pa2e')
-    parser.add_argument('--num-iters',   type=int, default=None,
-                        help='Override num_iters for GT-HAD')
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -130,6 +142,10 @@ Examples:
         if ft not in ALL_FOOD_TYPES:
             print(f"❌ Unknown food type: {ft}. Available: {', '.join(ALL_FOOD_TYPES)}")
             sys.exit(1)
+    
+    # For dry-run, only test with Almond (faster validation)
+    if args.dry_run:
+        food_types = ['Almond']
 
     # ── architectures ───────────────────────────────────────────────────
     archs = ALL_ARCHS
@@ -141,20 +157,21 @@ Examples:
         print("❌ No architectures selected.")
         sys.exit(1)
 
-    # ── extra kwargs per arch ───────────────────────────────────────────
-    pa2e_ours_kw = {}
-    if args.phase1_epochs: pa2e_ours_kw['phase1_epochs'] = args.phase1_epochs
-    if args.phase2_epochs: pa2e_ours_kw['phase2_epochs'] = args.phase2_epochs
-    gthad_kw = {}
-    if args.num_iters: gthad_kw['num_iters'] = args.num_iters
-    bocknet_kw = {}
-    # pass
-    extra_kwargs = {'ours': pa2e_ours_kw, 'PA2E': pa2e_ours_kw, 'GT-HAD': gthad_kw, 'BockNet': bocknet_kw}
+    # ── build extra kwargs ───────────────────────────────────────────────
+    extra_kwargs = {
+        'common': {
+            'dry_run': args.dry_run,
+            'retrain': (args.retrain == 'yes'),
+        },
+    }
+
+    dry_run_str = " [DRY RUN]" if args.dry_run else ""
 
     print(f"\n{'='*80}")
-    print(f"  HSI Food Anomaly Benchmark")
+    print(f"  HSI Food Anomaly Benchmark{dry_run_str}")
     print(f"  Architectures : {', '.join(archs)}")
     print(f"  Food types    : {', '.join(food_types)}")
+    print(f"  Retrain       : {args.retrain}")
     print(f"  Output dir    : {args.output_dir}")
     print(f"{'='*80}")
 

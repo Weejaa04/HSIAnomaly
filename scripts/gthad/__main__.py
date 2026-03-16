@@ -183,7 +183,6 @@ def benchmark_food_type(food_type: str,
         early_stopper = UniversalEarlyStopping(patience=50, min_delta=1e-4)
         
         # Training configuration
-        end_iter = 1 if dry_run else 25
         search_iter = 25  # Search every 25 iterations
         
         # Initialize match vector for FULL dataset
@@ -193,10 +192,12 @@ def benchmark_food_type(food_type: str,
         # search_matrix will be allocated only when needed (during search phases)
         
         # Training loop
-        print(f'\nTraining for {end_iter} iterations...')
-        for iteration in range(1, end_iter + 1):
+        print('\nTraining with early stopping...')
+        iteration = 0
+        while not early_stopper.early_stop:
+            iteration += 1
             # Fixed interval search scheduling
-            should_search = (iteration % search_iter == 0) and (iteration != end_iter)
+            should_search = (iteration % search_iter == 0)
             
             # Allocate search_matrix only when needed
             if should_search:
@@ -204,7 +205,7 @@ def benchmark_food_type(food_type: str,
             
             # --- TRAINING PASS (masked blocks only) ---
             net.train()
-            for idx, batch_data in enumerate(tqdm(data_loader_train, desc=f'Iter {iteration}/{end_iter}', leave=False)):
+            for idx, batch_data in enumerate(tqdm(data_loader_train, desc=f'Iter {iteration}', leave=False)):
                 batch_gt = batch_data['block_gt'].to(device)
                 batch_input = batch_data['block_input'].to(device)
                 block_idx = batch_data['index'].to(device)
@@ -261,12 +262,10 @@ def benchmark_food_type(food_type: str,
             
             avg_val_loss = val_loss_total / len(data_loader_val) if len(data_loader_val) > 0 else 0.0
 
-            if not dry_run:
-                end_iter += 1 # Increment end_iter for next epoch to let it run until convergence if not in dry_run mode
-
             early_stopper(avg_val_loss)
             if early_stopper.early_stop:
                 print(f'  Convergence reached at iteration {iteration}. Terminating training.')
+            if dry_run:
                 break
         
         train_time = time.time() - start_time

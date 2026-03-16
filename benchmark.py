@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import traceback
+import numpy as np
 
 ALL_FOOD_TYPES  = ['Almond', 'Pistachio', 'GarlicStems']
 ALL_ARCHS       = ['BockNet', 'our', 'pa2e', 'gthad']
@@ -97,9 +98,15 @@ def print_summary(all_results: dict):
             elif 'original_model' in r:          # ours / our (fused pair)
                 roc = r['original_model']['roc_auc']
                 pr  = r['original_model']['pr_auc']
-                row += f"  {roc:>{col}.4f} {pr:>{col}.4f}"
+                roc_str = f"{roc:>.4f}" if (roc is not None and not np.isnan(roc)) else "nan"
+                pr_str = f"{pr:>.4f}" if (pr is not None and not np.isnan(pr)) else "nan"
+                row += f"  {roc_str:>{col}} {pr_str:>{col}}"
             else:                                # GT-HAD (single model)
-                row += f"  {r['roc_auc']:>{col}.4f} {r['pr_auc']:>{col}.4f}"
+                roc = r.get('roc_auc')
+                pr = r.get('pr_auc')
+                roc_str = f"{roc:>.4f}" if (roc is not None and not np.isnan(roc)) else "nan"
+                pr_str = f"{pr:>.4f}" if (pr is not None and not np.isnan(pr)) else "nan"
+                row += f"  {roc_str:>{col}} {pr_str:>{col}}"
         print(row)
 
     print(div)

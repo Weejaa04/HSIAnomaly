@@ -144,7 +144,7 @@ def initialize_center(model, train_loader):
     return center
 
 
-def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.5, food_type=None):
+def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.5, food_type=None, dry_run=False):
     """
     Phase 2: DSVDD-style manifold refinement + CosineAnnealingLR + Early Stopping.
     
@@ -173,13 +173,15 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha
     recon_losses = []
     val_losses = []
     
-    for epoch in range(num_epochs):
+    epoch = 0
+    while not early_stopper.early_stop:
+        epoch += 1
         model.train()
         epoch_loss = 0
         epoch_center_loss = 0
         epoch_recon_loss = 0
         
-        for batch in tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs}'):
+        for batch in tqdm(train_loader, desc=f'Epoch {epoch}'):
             x = batch.to(device)
             
             optimizer.zero_grad()
@@ -221,7 +223,7 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha
         val_losses.append(avg_val_loss)
         
         current_lr = scheduler.get_last_lr()[0]
-        print(f'Epoch {epoch+1}/{num_epochs}, '
+        print(f'Epoch {epoch}, '
               f'Loss: {avg_loss:.6f}, '
               f'Center: {avg_center_loss:.6f}, '
               f'Recon: {avg_recon_loss:.6f}, '
@@ -231,7 +233,9 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha
         # Early stopping check
         early_stopper(avg_val_loss)
         if early_stopper.early_stop:
-            print(f"\n✅ Convergence reached at epoch {epoch+1}. Stopping training.")
+            print(f"\n✅ Convergence reached at epoch {epoch}. Stopping training.")
+        
+        if dry_run:
             break
     
     if food_type:
@@ -413,7 +417,7 @@ def benchmark_food_type(food_type, **kwargs):
         # ── Phase 2: DSVDD-style Training with Early Stopping ──────────────────
         model_ft = PA2EFT(model).to(device)
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = train_phase2(
-            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type
+            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type, dry_run=dry_run
         )
         train_time_sec = time.time() - training_start
     else:

@@ -97,11 +97,9 @@ def benchmark_food_type(food_type: str,
     if dry_run:
         patience = 1  # Stop after first epoch without improvement
         min_delta = 1e-8  # Very tight threshold
-        max_epochs_cap = 2  # Hard cap at 2 epochs for dry run
     else:
         patience = 50
         min_delta = 1e-4
-        max_epochs_cap = 1000  # No effective cap for normal runs
 
     seed = SEED_DICT.get(food_type, 42)
     set_seed(seed)
@@ -140,7 +138,7 @@ def benchmark_food_type(food_type: str,
         early_stopper = UniversalEarlyStopping(patience=patience, min_delta=min_delta)
         
         epoch = 0
-        while not early_stopper.early_stop and epoch < max_epochs_cap:
+        while not early_stopper.early_stop:
             epoch += 1
             
             # Training pass - apply mask to prevent learning from validation region
@@ -167,6 +165,8 @@ def benchmark_food_type(food_type: str,
             
             # Check early stopping based on validation loss
             early_stopper(val_loss.item())
+            if dry_run:
+                break
                 
         train_time = time.time() - start
         print(f'\nTraining time: {train_time:.2f}s')

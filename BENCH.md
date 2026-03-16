@@ -349,6 +349,101 @@ def calibrate_hsi(data, white_ref_path, dark_ref_path):
 
 ---
 
+## 5.5. Training Loop Pattern (Critical for Model Convergence)
+
+### The Standard Pattern: While Loop + Early Stopping + Dry Run Break
+
+**ALL models must follow this pattern to ensure proper convergence without artificial epoch caps:**
+
+```python
+# REQUIRED PATTERN for all architectures
+def train_model(model, train_loader, val_loader, optimizer, device, dry_run=False):
+    """
+    Train with early stopping - allows models to converge naturally.
+    Dry run support ensures quick validation of the training pipeline.
+    """
+    
+    # Initialize early stopper
+    early_stopper = UniversalEarlyStopping(patience=50, min_delta=1e-4)
+    
+    # Use while loop, NOT for loop with fixed epochs
+    epoch = 0
+    while not early_stopper.early_stop:
+        epoch += 1
+        
+        # Training phase
+        model.train()
+        for batch in train_loader:
+            # Your training code here
+            loss.backward()
+            optimizer.step()
+        
+        # Validation phase
+        model.eval()
+        with torch.inference_mode():
+            val_loss = evaluate(model, val_loader)
+        
+        # Early stopping check
+        early_stopper(val_loss)
+        if early_stopper.early_stop:
+            print(f"✅ Convergence reached at epoch {epoch}. Stopping training.")
+        
+        # CRITICAL: Support dry run (exits after 1 epoch)
+        if dry_run:
+            print(f"Dry run mode: completed 1 epoch (full pipeline validated)")
+            break
+    
+    return model, epoch
+```
+
+### Why This Pattern?
+
+| Aspect | Old Pattern (for loop) | New Pattern (while loop) |
+|--------|------------------------|-------------------------|
+| **Convergence** | Hard-capped at N epochs (e.g., `for epoch in range(150)`) | Trains until early stopping triggers (natural stopping point) |
+| **Overfitting Risk** | Forced to run full N epochs even after convergence | Stops immediately after validation loss plateaus |
+| **Dry Run Support** | Requires parameter changes (`max_epochs=1`) | Uses simple `if dry_run: break` |
+| **Code Clarity** | Epoch limit mixed with early stopping logic | Single, clear exit condition |
+| **Scalability** | Different food types need different epoch counts | One pattern works for all |
+
+### Migration Guide
+
+If your model currently uses:
+```python
+# ❌ OLD PATTERN - Do not use
+for epoch in range(num_epochs):  # Hard cap
+    train()
+    val_loss = validate()
+    early_stopper(val_loss)
+    if early_stopper.early_stop:
+        break
+```
+
+Convert to:
+```python
+# ✅ NEW PATTERN - Required
+epoch = 0
+while not early_stopper.early_stop:  # Soft cap (early stopping only)
+    epoch += 1
+    train()
+    val_loss = validate()
+    early_stopper(val_loss)
+    if early_stopper.early_stop:
+        print(f"Convergence reached at epoch {epoch}. Stopping training.")
+    if dry_run:  # Add this for dry run support
+        break
+```
+
+### Examples in Codebase
+
+Reference implementations:
+- [BockNet](scripts/bocknet/__main__.py#L143) – Lines 143-176
+- [PA2E](scripts/pa2e/__main__.py#L153) – Lines 153-216
+- [Our Model](scripts/our/__main__.py#L175) – Lines 175-240
+- [GT-HAD](scripts/gthad/__main__.py#L188) – Lines 188-270
+
+---
+
 ## 7. Recommended Utility Implementations
 
 ### Early Stopping Monitor
@@ -436,6 +531,10 @@ def benchmark_food_type(food_type, param1=default1, param2=default2, **kwargs):
 - [ ] Return dictionary with `roc_auc` and `pr_auc` keys
 - [ ] Respect spatial boundaries: train on `Y[50:200]`, validate on `Y[300:350]`
 - [ ] Add weight saving/loading to `./weights/<ARCH>/<food_type>.pt`
+- [ ] **[CRITICAL]** Use while loop + early stopping + if dry_run break pattern (see [Section 5.5](#55-training-loop-pattern-critical-for-model-convergence))
+  - ✅ `while not early_stopper.early_stop:` (NOT `for epoch in range(num_epochs)`)
+  - ✅ `if dry_run: break` at end of loop
+  - ✅ No hard epoch cap – let model converge naturally
 - [ ] Implement early stopping using unsupervised loss (no GT labels in validation)
 - [ ] Support `dry_run=True` for quick validation (1 epoch/iteration)
 - [ ] Support `retrain=False` to load pre-trained weights
@@ -497,13 +596,26 @@ def benchmark_food_type(food_type: str,
     if not retrain and load_weights(model, food_type, device):
         train_time = 0.0
     else:
-        epochs = 1 if dry_run else 50
-        for epoch in range(epochs):
+        # REQUIRED: Use while loop with early stopping (no hard epoch cap)
+        early_stopper = UniversalEarlyStopping(patience=50, min_delta=1e-4)
+        epoch = 0
+        while not early_stopper.early_stop:
+            epoch += 1
+            
             # Train on Y[50:200]
             loss = model.train_step(data, train_mask, optimizer)
             
             # Validate on Y[300:350]
             val_loss = model.val_step(data, val_mask)
+            
+            # Early stopping check
+            early_stopper(val_loss)
+            if early_stopper.early_stop:
+                print(f"✅ Convergence reached at epoch {epoch}. Stopping training.")
+            
+            # Support dry run mode (exit after 1 epoch)
+            if dry_run:
+                break
             
             if epoch % 10 == 0:
                 print(f"Epoch {epoch}: loss={loss:.4f}, val_loss={val_loss:.4f}")

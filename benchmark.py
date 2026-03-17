@@ -20,20 +20,22 @@ import traceback
 import numpy as np
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
-ALL_ARCHS = ["BockNet", "our", "pa2e", "gthad", "SuperAD"]
+ALL_ARCHS = ["bocknet", "our", "pa2e", "gthad", "superad", "sglnet"]
 ARCH_MODULE_MAP = {
-    "BockNet": "scripts.bocknet.__main__",
+    "bocknet": "scripts.bocknet.__main__",
     "our": "scripts.our.__main__",
     "pa2e": "scripts.pa2e.__main__",
     "gthad": "scripts.gthad.__main__",
-    "SuperAD": "scripts.superad.__main__",
+    "superad": "scripts.superad.__main__",
+    "sglnet": "scripts.sglnet.__main__",
 }
 ARCH_RESULT_FILE = {
-    "BockNet": "bocknet.json",
+    "bocknet": "bocknet.json",
     "our": "our.json",
     "pa2e": "pa2e.json",
     "gthad": "gthad.json",
-    "SuperAD": "superad.json",
+    "superad": "superad.json",
+    "sglnet": "sglnet.json",
 }
 
 
@@ -94,7 +96,7 @@ def print_summary(all_results: dict):
     roc_header += f"  {'Average':>{col}}"
     print(roc_header)
     print("─" * len(roc_header))
-    
+
     # Calculate averages and sort
     roc_avgs = {}
     for arch in archs:
@@ -108,10 +110,10 @@ def print_summary(all_results: dict):
                     roc = r.get("roc_auc")
                 if roc is not None and not np.isnan(roc):
                     scores.append(roc)
-        roc_avgs[arch] = np.mean(scores) if scores else float('nan')
-    
+        roc_avgs[arch] = np.mean(scores) if scores else float("nan")
+
     sorted_archs_roc = sorted(archs, key=lambda a: roc_avgs[a], reverse=True)
-    
+
     for arch in sorted_archs_roc:
         row = f"{arch:<20}"
         for ft in food_types:
@@ -142,7 +144,7 @@ def print_summary(all_results: dict):
     pr_header += f"  {'Average':>{col}}"
     print(pr_header)
     print("─" * len(pr_header))
-    
+
     # Calculate averages and sort
     pr_avgs = {}
     for arch in archs:
@@ -156,10 +158,10 @@ def print_summary(all_results: dict):
                     pr = r.get("pr_auc")
                 if pr is not None and not np.isnan(pr):
                     scores.append(pr)
-        pr_avgs[arch] = np.mean(scores) if scores else float('nan')
-    
+        pr_avgs[arch] = np.mean(scores) if scores else float("nan")
+
     sorted_archs_pr = sorted(archs, key=lambda a: pr_avgs[a], reverse=True)
-    
+
     for arch in sorted_archs_pr:
         row = f"{arch:<20}"
         for ft in food_types:
@@ -193,8 +195,8 @@ def main():
 Examples:
   python benchmark.py
   python benchmark.py --food Almond
-  python benchmark.py --only GT-HAD
-  python benchmark.py --skip GT-HAD --output-dir ./results/run1
+  python benchmark.py --only gthad
+  python benchmark.py --skip gthad --output-dir ./results/run1
   python benchmark.py --dry-run                  # train only 1 epoch/iter per architecture
   python benchmark.py --dry-run --retrain no     # load saved models without retraining
         """,

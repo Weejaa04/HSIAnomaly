@@ -69,7 +69,7 @@ class UniversalEarlyStopping:
                 self.early_stop = True
 
 
-WEIGHT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "weights", "SuperAD")
+WEIGHT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "weights", "superad")
 
 
 def save_weights(model, food_type: str):

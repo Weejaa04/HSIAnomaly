@@ -20,7 +20,7 @@ import traceback
 import numpy as np
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
-ALL_ARCHS = ["bocknet", "our", "pa2e", "gthad", "superad", "sglnet"]
+ALL_ARCHS = ["bocknet", "our", "pa2e", "gthad", "superad", "sglnet", "autoad", "otad"]
 ARCH_MODULE_MAP = {
     "bocknet": "scripts.bocknet.__main__",
     "our": "scripts.our.__main__",
@@ -28,6 +28,8 @@ ARCH_MODULE_MAP = {
     "gthad": "scripts.gthad.__main__",
     "superad": "scripts.superad.__main__",
     "sglnet": "scripts.sglnet.__main__",
+    "autoad": "scripts.autoad.__main__",
+    "otad": "scripts.otad.__main__",
 }
 ARCH_RESULT_FILE = {
     "bocknet": "bocknet.json",
@@ -36,6 +38,8 @@ ARCH_RESULT_FILE = {
     "gthad": "gthad.json",
     "superad": "superad.json",
     "sglnet": "sglnet.json",
+    "autoad": "autoad.json",
+    "otad": "otad.json",
 }
 
 

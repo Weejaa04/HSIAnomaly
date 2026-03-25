@@ -1,0 +1,35 @@
+{
+  "Almond": {
+    "roc_auc": 0.8229004406472049,
+    "pr_auc": 0.4605030623030655,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 12.500142,
+    "n_params": 640635,
+    "max_vram_gb": 0.4185323715209961
+  },
+  "Pistachio": {
+    "roc_auc": 0.8158223438225423,
+    "pr_auc": 0.48081269821549183,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 12.303432,
+    "n_params": 640635,
+    "max_vram_gb": 0.4185323715209961
+  },
+  "GarlicStems": {
+    "roc_auc": 0.9720309156944587,
+    "pr_auc": 0.5786609901477363,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 12.369774,
+    "n_params": 640635,
+    "max_vram_gb": 0.4185323715209961
+  }
+}

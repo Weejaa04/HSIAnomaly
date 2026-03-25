@@ -1,15 +1,282 @@
 {
-  "cbar": {
+  "bocknet": {
     "Almond": {
-      "roc_auc": 0.5004132556583827,
-      "pr_auc": 0.015611196673796611,
+      "roc_auc": 0.928857295102005,
+      "pr_auc": 0.4888397712488668,
       "detectmap_shape": [
         400,
         512
       ],
-      "infer_time_sec": 0.04324030876159668,
-      "n_params": 229552348,
-      "max_vram_gb": 6.0279
+      "infer_time_sec": 0.429795503616333,
+      "n_params": 736576,
+      "max_vram_gb": 5.1528
+    },
+    "Pistachio": {
+      "roc_auc": 0.8227585123050395,
+      "pr_auc": 0.34782930510955523,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.2600867748260498,
+      "n_params": 736576,
+      "max_vram_gb": 5.1526
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9288279135978195,
+      "pr_auc": 0.3022993531626048,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.2693350315093994,
+      "n_params": 736576,
+      "max_vram_gb": 5.1526
+    }
+  },
+  "our": {
+    "Almond": {
+      "roc_auc": 0.972070162438458,
+      "pr_auc": 0.8577173859829836,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 4.060131,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
+    },
+    "Pistachio": {
+      "roc_auc": 0.9670282917000731,
+      "pr_auc": 0.8228972698859286,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 3.848705,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9954983101412656,
+      "pr_auc": 0.9335503000533971,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 4.146329,
+      "n_params": 47339,
+      "max_vram_gb": 0.34714221954345703
+    }
+  },
+  "pa2e": {
+    "Almond": {
+      "roc_auc": 0.899008810371693,
+      "pr_auc": 0.5197593051035652,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 4.017994,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    },
+    "Pistachio": {
+      "roc_auc": 0.9333632138732897,
+      "pr_auc": 0.7500402168624198,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 3.811904,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    },
+    "GarlicStems": {
+      "roc_auc": 0.993905121925312,
+      "pr_auc": 0.9220725746046381,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 4.335563,
+      "n_params": 346872,
+      "max_vram_gb": 0.039925575256347656
+    }
+  },
+  "gthad": {
+    "Almond": {
+      "roc_auc": 0.9236547735781446,
+      "pr_auc": 0.5905800329622992,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 9.458080053329468,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    },
+    "Pistachio": {
+      "roc_auc": 0.9361623844434616,
+      "pr_auc": 0.6156908959152707,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 6.980109930038452,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9892357778635342,
+      "pr_auc": 0.790079311255797,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 6.559265851974487,
+      "n_params": 104736,
+      "max_vram_gb": 5.201779842376709
+    }
+  },
+  "superad": {
+    "Almond": {
+      "roc_auc": 0.7474288002563858,
+      "pr_auc": 0.33339405544712264,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.0541682243347168,
+      "n_params": 247424,
+      "max_vram_gb": 0.7746429443359375
+    },
+    "Pistachio": {
+      "roc_auc": 0.83185421268931,
+      "pr_auc": 0.2678555513467023,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.033167362213134766,
+      "n_params": 247424,
+      "max_vram_gb": 0.7746429443359375
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9056941612118273,
+      "pr_auc": 0.299469591823657,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.06045341491699219,
+      "n_params": 247424,
+      "max_vram_gb": 0.7746429443359375
+    }
+  },
+  "sglnet": {
+    "Almond": {
+      "roc_auc": 0.8229004406472049,
+      "pr_auc": 0.4605030623030655,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 36.169732,
+      "n_params": 640635,
+      "max_vram_gb": 0.4185323715209961
+    },
+    "Pistachio": {
+      "roc_auc": 0.8158223438225423,
+      "pr_auc": 0.48081269821549183,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 25.372355,
+      "n_params": 640635,
+      "max_vram_gb": 0.4185323715209961
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9720309156944587,
+      "pr_auc": 0.5786609901477363,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 19.6034,
+      "n_params": 640635,
+      "max_vram_gb": 0.4185323715209961
+    }
+  },
+  "autoad": {
+    "Almond": {
+      "roc_auc": 0.8492506629476368,
+      "pr_auc": 0.38239055908563835,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.0736842155456543,
+      "n_params": 3276896,
+      "max_vram_gb": 0.9064
+    },
+    "Pistachio": {
+      "roc_auc": 0.870490920770687,
+      "pr_auc": 0.4112806468639441,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.07012319564819336,
+      "n_params": 3276896,
+      "max_vram_gb": 0.9064
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9687690045249034,
+      "pr_auc": 0.6506814030796977,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 0.0527958869934082,
+      "n_params": 3276896,
+      "max_vram_gb": 0.9064
+    }
+  },
+  "otad": {
+    "Almond": {
+      "roc_auc": 0.9222960557101764,
+      "pr_auc": 0.29827450755613005,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 1.01768159866333,
+      "n_params": 328544,
+      "max_vram_gb": 8.3191
+    },
+    "Pistachio": {
+      "roc_auc": 0.9216191388497741,
+      "pr_auc": 0.2837152029162952,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 1.1776175498962402,
+      "n_params": 328544,
+      "max_vram_gb": 8.321
+    },
+    "GarlicStems": {
+      "roc_auc": 0.9509231514381388,
+      "pr_auc": 0.2692430606578682,
+      "detectmap_shape": [
+        400,
+        512
+      ],
+      "infer_time_sec": 1.0164721012115479,
+      "n_params": 328544,
+      "max_vram_gb": 8.321
     }
   }
 }

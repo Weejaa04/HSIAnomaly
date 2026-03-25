@@ -6,7 +6,7 @@
       400,
       512
     ],
-    "infer_time_sec": 2.436934,
+    "infer_time_sec": 4.060131,
     "n_params": 47339,
     "max_vram_gb": 0.34714221954345703
   },
@@ -17,7 +17,7 @@
       400,
       512
     ],
-    "infer_time_sec": 2.44652,
+    "infer_time_sec": 3.848705,
     "n_params": 47339,
     "max_vram_gb": 0.34714221954345703
   },
@@ -28,7 +28,7 @@
       400,
       512
     ],
-    "infer_time_sec": 2.466452,
+    "infer_time_sec": 4.146329,
     "n_params": 47339,
     "max_vram_gb": 0.34714221954345703
   }

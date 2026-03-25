@@ -29,7 +29,7 @@ ALL_ARCHS = [
     "sglnet",
     "autoad",
     "otad",
-    "cbar",
+    # "cbar",
 ]
 ARCH_MODULE_MAP = {
     "bocknet": "scripts.bocknet.__main__",
@@ -40,7 +40,7 @@ ARCH_MODULE_MAP = {
     "sglnet": "scripts.sglnet.__main__",
     "autoad": "scripts.autoad.__main__",
     "otad": "scripts.otad.__main__",
-    "cbar": "scripts.cbar.__main__",
+    # "cbar": "scripts.cbar.__main__",
 }
 ARCH_RESULT_FILE = {
     "bocknet": "bocknet.json",
@@ -51,7 +51,7 @@ ARCH_RESULT_FILE = {
     "sglnet": "sglnet.json",
     "autoad": "autoad.json",
     "otad": "otad.json",
-    "cbar": "cbar.json",
+    # "cbar": "cbar.json",
 }
 
 

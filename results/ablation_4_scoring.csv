@@ -1,0 +1,9 @@
+variant,food,roc_auc,pr_auc,converged_epoch,train_time_sec,infer_time_sec,n_params
+Nearest-Neighbour Memory Bank (*),Almond,0.9732,0.8565,90,312.9391,2.2310,47339
+Nearest-Neighbour Memory Bank (*),Pistachio,0.9601,0.8718,118,400.2035,2.2002,47339
+Nearest-Neighbour Memory Bank (*),GarlicStems,0.9953,0.9355,77,279.1596,2.2139,47339
+Nearest-Neighbour Memory Bank (*),AVG,0.9762,0.8879,95.0000,330.7674,2.2150,47339.0000
+DSVDD center distance,Almond,0.8988,0.5798,90,313.0050,1.2101,47339
+DSVDD center distance,Pistachio,0.8412,0.5896,118,398.2695,1.2114,47339
+DSVDD center distance,GarlicStems,0.9930,0.9150,77,278.7708,1.2277,47339
+DSVDD center distance,AVG,0.9110,0.6948,95.0000,330.0151,1.2164,47339.0000

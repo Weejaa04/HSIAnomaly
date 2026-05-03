@@ -85,6 +85,28 @@ def get_spatial_train_val_mask(H=400, W=512):
     return train_mask, val_mask
 
 
+def get_random_train_val_mask(H, W, seed=42):
+    """Generate random masks for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_mask: (H, W) boolean mask
+        val_mask: (H, W) boolean mask
+    """
+    np.random.seed(seed)
+    rand_map = np.random.rand(H, W)
+    
+    train_mask = rand_map < 0.375
+    val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
+    
+    return train_mask, val_mask
+
+
 def img2mask(img):
     """Convert residual map to anomaly score map."""
     img = img[0].sum(0)  # Sum over channels and remove batch

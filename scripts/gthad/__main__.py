@@ -32,7 +32,7 @@ from scripts.gthad.data import DatasetHsi
 from scripts.gthad.block import BlockFold, BlockSearch
 from scripts.gthad.utils import (
     load_hsi_data, load_label, calibrate_hsi,
-    get_spatial_train_val_mask, save_weights, load_weights, weights_exist,
+    get_spatial_train_val_mask, get_random_train_val_mask, save_weights, load_weights, weights_exist,
     img2mask, UniversalEarlyStopping
 )
 
@@ -49,6 +49,8 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True, warn_only=True)
 
@@ -68,6 +70,7 @@ def benchmark_food_type(food_type: str,
                         base_dir: str = 'AnomalyonFood/Dataset',
                         dry_run: bool = False,
                         retrain: bool = True,
+                        split_method: str = "spatial",
                         **kwargs) -> dict:
     """
     Train and evaluate GT-HAD on a single food type.
@@ -77,12 +80,13 @@ def benchmark_food_type(food_type: str,
         base_dir: Root path to dataset
         dry_run: If True, run minimal training (1 epoch) for validation
         retrain: If True, train from scratch. If False, load saved weights
+        split_method: "spatial" (guillotine) or "random" (random sampling)
         **kwargs: Additional hyperparameters
     
     Returns:
         dict with keys: roc_auc, pr_auc, detectmap_shape, infer_time_sec, n_params
     """
-    print(f"\n{'='*70}\nBENCHMARKING: {food_type} (GT-HAD)\n{'='*70}")
+    print(f"\n{'='*70}\nBENCHMARKING: {food_type} (GT-HAD, split_method={split_method})\n{'='*70}")
     
     # ─────────────────────────────────────────────────────────────────────────
     # DATA LOADING
@@ -151,13 +155,16 @@ def benchmark_food_type(food_type: str,
         # ─────────────────────────────────────────────────────────────────────
         start_time = time.time()
         
-        # Get spatial masks (Y[50:200] train, Y[300:350] val)
+        # Get spatial masks based on split method
         H, W = data.shape[0], data.shape[1]
-        train_mask, val_mask = get_spatial_train_val_mask(H, W)
-        
-        print(f'Spatial guillotine protocol:')
-        print(f'  Train block: Y[50:200] ({train_mask.sum()} pixels)')
-        print(f'  Val block:   Y[300:350] ({val_mask.sum()} pixels)')
+        if split_method == "random":
+            train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
+            print(f'Random sampling protocol:')
+        else:  # spatial
+            train_mask, val_mask = get_spatial_train_val_mask(H, W)
+            print(f'Spatial guillotine protocol:')
+        print(f'  Train block: {train_mask.sum()} pixels')
+        print(f'  Val block:   {val_mask.sum()} pixels')
         
         # Create MASKED datasets for training iteration (gradient restriction)
         dataset_train = DatasetHsi(data_torch, wsize=block_size, wstride=3, spatial_mask=train_mask)

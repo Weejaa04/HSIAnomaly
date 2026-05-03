@@ -83,6 +83,29 @@ def get_spatial_train_val_mask(H=400, W=512, train_y_start=50, train_y_end=200,
     return train_mask, val_mask
 
 
+def get_random_train_val_indices(H, W, seed=42):
+    """Generate random indices for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_indices: 1D array of flattened pixel indices for training
+        val_indices: 1D array of flattened pixel indices for validation
+    """
+    np.random.seed(seed)
+    total_pixels = H * W
+    rand_map = np.random.rand(total_pixels)
+    
+    train_indices = np.where(rand_map < 0.375)[0]
+    val_indices = np.where((rand_map >= 0.375) & (rand_map < 0.500))[0]
+    
+    return train_indices, val_indices
+
+
 def get_weight_path(food_type, suffix=None):
     """
     Get weight file path for a given food type.

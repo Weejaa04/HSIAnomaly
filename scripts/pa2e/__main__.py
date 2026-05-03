@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from scripts.pa2e.utils import (
     UniversalEarlyStopping, load_hsi_data, load_label, calibrate_hsi,
-    get_spatial_train_val_mask, save_weights, load_weights, weights_exist
+    get_spatial_train_val_mask, get_random_train_val_indices, save_weights, load_weights, weights_exist
 )
 from scripts.pa2e.model import PA2E, PA2EFT
 from scripts.pa2e.data import HSIPixelDataset
@@ -48,6 +48,8 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True, warn_only=True)
 
@@ -272,6 +274,7 @@ def benchmark_food_type(food_type: str,
                         base_dir: str = 'AnomalyonFood/Dataset',
                         dry_run: bool = False,
                         retrain: bool = True,
+                        split_method: str = "spatial",
                         **kwargs) -> dict:
     """
     Run PA2E benchmark on a specific food type.
@@ -281,6 +284,7 @@ def benchmark_food_type(food_type: str,
         base_dir: Root path to the dataset directory
         dry_run: If True, run minimal iterations (1 epoch/iteration)
         retrain: If True, train from scratch. If False, load saved weights
+        split_method: "spatial" (guillotine) or "random" (random sampling)
         **kwargs: Additional hyperparameters
     
     Returns:
@@ -288,9 +292,10 @@ def benchmark_food_type(food_type: str,
     """
     dry_run = kwargs.get('dry_run', dry_run)
     retrain = kwargs.get('retrain', retrain)
+    split_method = kwargs.get('split_method', split_method)
     
     print(f"\n{'='*80}")
-    print(f"PA2E Benchmark: {food_type}")
+    print(f"PA2E Benchmark: {food_type} (split_method={split_method})")
     print(f"{'='*80}")
     
     # Track timing
@@ -311,8 +316,22 @@ def benchmark_food_type(food_type: str,
     
     H, W, B = train_data.shape
     
-    # Get spatial masks
-    train_mask, val_mask = get_spatial_train_val_mask(H, W)
+    # Get masks based on split method
+    if split_method == 'random':
+        train_indices, val_indices = get_random_train_val_indices(H, W, seed=42)
+        print(f'Random sampling protocol:')
+        print(f'Train pixels: {len(train_indices)}  |  Val pixels: {len(val_indices)}')
+    else:  # spatial
+        train_indices, val_indices = get_spatial_train_val_mask(H, W)
+        print(f'Spatial guillotine protocol:')
+        print(f'Train pixels (spatial Y[50:200]): {train_indices.sum()}')
+        print(f'Val pixels (spatial Y[300:350]): {val_indices.sum()}')
+    
+    # For compatibility with dataset creation, convert to boolean masks
+    train_mask = np.zeros(H * W, dtype=bool)
+    val_mask = np.zeros(H * W, dtype=bool)
+    train_mask[train_indices] = True
+    val_mask[val_indices] = True
     
     # Load test data
     test_data_path = os.path.join(base_path, 'Test', 'data.hdr')

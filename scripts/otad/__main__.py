@@ -34,6 +34,8 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
@@ -79,9 +81,10 @@ def benchmark_food_type(
     num_heads: int = 2,
     dry_run: bool = False,
     retrain: bool = True,
+    split_method: str = "spatial",
 ) -> dict:
 
-    print(f"\n{'=' * 70}\nBENCHMARKING: {food_type}\n{'=' * 70}")
+    print(f"\n{'=' * 70}\nBENCHMARKING: {food_type} (split_method={split_method})\n{'=' * 70}")
 
     if dry_run:
         patience = 1
@@ -95,8 +98,10 @@ def benchmark_food_type(
     seed = SEED_DICT.get(food_type, 42)
     set_seed(seed)
 
-    img_tensor, gt, H, W, B = get_food_data(food_type, base_dir, device=device)
+    img_tensor, gt, H, W, B, train_mask, val_mask = get_food_data(food_type, base_dir, device=device, split_method=split_method)
     print(f"Image: ({H}, {W}, {B})  |  Anomaly pixels: {int(gt.sum())} / {H * W}")
+    print(f"Split method: {split_method}")
+    print(f"Train pixels: {int(train_mask.sum())}  |  Val pixels: {int(val_mask.sum())}")
 
     net = OTADNet(
         input_channels=B,
@@ -120,9 +125,10 @@ def benchmark_food_type(
     model_path = f"{model_dir}/{food_type}.pt"
 
     block_size = patch_size * patch_grid
-    data_set = OTADDataset(img_tensor, block_size=block_size, stride=stride)
-    train_loader = DataLoader(data_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(data_set, batch_size=batch_size, shuffle=False)
+    data_set_train = OTADDataset(img_tensor, block_size=block_size, stride=stride, spatial_mask=train_mask)
+    data_set_val = OTADDataset(img_tensor, block_size=block_size, stride=stride, spatial_mask=val_mask)
+    train_loader = DataLoader(data_set_train, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(data_set_val, batch_size=batch_size, shuffle=False)
     block_restore = BlockRestore(block_size=block_size, stride=stride)
 
     if not retrain and os.path.exists(model_path):
@@ -201,7 +207,7 @@ def benchmark_food_type(
             res_map.append(res)
 
     res_map = torch.cat(res_map, dim=0)
-    res_map = block_restore(res_map, data_set.padding, H, W)
+    res_map = block_restore(res_map, data_set_val.padding, H, W, valid_indices=data_set_val.valid_indices)
     res_map = res_map[0].sum(0).cpu().numpy()
     res_map = hyper_norm(res_map)
 

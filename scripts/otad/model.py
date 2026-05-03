@@ -242,52 +242,110 @@ class BlockRestore(nn.Module):
         self.block_size = block_size
         self.stride = stride
 
-    def forward(self, x, paddings, height, width):
+    def forward(self, x, paddings, height, width, valid_indices=None):
         num_blocks = x.size(0)
+        
+        # Reshape blocks for fold operation
         blocks_reshaped = x.view(num_blocks, -1).permute(1, 0).unsqueeze(0)
-
-        block_size_height = (
-            height + 2 * paddings[2] - self.block_size
-        ) / self.stride + 1
-        block_size_width = (width + 2 * paddings[0] - self.block_size) / self.stride + 1
-
-        if block_size_height * block_size_width != num_blocks:
-            pad = [paddings[3], paddings[1]]
-        else:
-            pad = [paddings[2], paddings[0]]
-
-        original_image = F.fold(
+        
+        # Calculate padded dimensions
+        pad_left, pad_right, pad_top, pad_bottom = paddings
+        padded_height = height + pad_top + pad_bottom
+        padded_width = width + pad_left + pad_right
+        
+        # Calculate expected number of blocks for the padded image
+        expected_height_blocks = (padded_height - self.block_size) // self.stride + 1
+        expected_width_blocks = (padded_width - self.block_size) // self.stride + 1
+        expected_total = expected_height_blocks * expected_width_blocks
+        
+        # If we have fewer blocks than expected (due to spatial masking), pad with zeros
+        if valid_indices is not None and num_blocks < expected_total:
+            device = x.device
+            full_blocks = torch.zeros(
+                expected_total, x.size(1), x.size(2), x.size(3),
+                device=device, dtype=x.dtype
+            )
+            full_blocks[valid_indices] = x
+            blocks_reshaped = full_blocks.view(expected_total, -1).permute(1, 0).unsqueeze(0)
+        
+        # Fold onto the padded image size with padding=0 (since image is already padded)
+        padded_image = F.fold(
             blocks_reshaped,
-            (height, width),
+            (padded_height, padded_width),
             (self.block_size, self.block_size),
-            padding=pad,
+            padding=0,
             stride=self.stride,
         )
-
-        overlapping_mask = torch.ones_like(original_image)
+        
+        # Create overlapping mask for proper averaging
+        overlapping_mask = torch.ones_like(padded_image)
         mask_unfold = F.unfold(
             overlapping_mask,
             (self.block_size, self.block_size),
-            padding=pad,
+            padding=0,
             stride=self.stride,
         )
         fold_mask = F.fold(
             mask_unfold,
-            (height, width),
+            (padded_height, padded_width),
             (self.block_size, self.block_size),
-            padding=pad,
+            padding=0,
             stride=self.stride,
         )
-
-        out = original_image / fold_mask
-        return out
+        
+        # Average overlapping regions
+        averaged_image = padded_image / fold_mask
+        
+        # Remove padding to get back to original dimensions
+        unpadded = averaged_image[:, :, pad_top:padded_height-pad_bottom, pad_left:padded_width-pad_right]
+        
+        return unpadded
 
 
 class OTADDataset(torch.utils.data.Dataset):
-    def __init__(self, data, block_size=15, stride=5):
+    def __init__(self, data, block_size=15, stride=5, spatial_mask=None):
+        """
+        Args:
+            data: (1, C, H, W) tensor
+            block_size: Size of each block
+            stride: Stride for block generation
+            spatial_mask: Optional (H, W) boolean mask. Only blocks with centers in the masked region are included.
+        """
         super().__init__()
         self.data_processer = BlockGeneration(block_size=block_size, stride=stride)
         self.gt_blocks, self.input_blocks, self.padding = self.data_processer(data)
+        self.block_size = block_size
+        self.stride = stride
+        self.data_shape = data.shape
+        
+        # Apply spatial masking if provided
+        self.valid_indices = None
+        if spatial_mask is not None:
+            H, W = data.shape[2], data.shape[3]
+            self.valid_indices = self._get_valid_block_indices(
+                H, W, block_size, stride, spatial_mask
+            )
+            # Filter blocks
+            self.gt_blocks = self.gt_blocks[self.valid_indices]
+            self.input_blocks = self.input_blocks[self.valid_indices]
+    
+    def _get_valid_block_indices(self, H, W, block_size, stride, spatial_mask):
+        """Get indices of blocks whose centers fall within the spatial mask."""
+        import numpy as np
+        
+        half_p = block_size // 2
+        valid_y = np.arange(0 + half_p, H - half_p, stride)
+        valid_x = np.arange(0 + half_p, W - half_p, stride)
+        
+        yy, xx = np.meshgrid(valid_y, valid_x, indexing='ij')
+        centers_y = yy.ravel()
+        centers_x = xx.ravel()
+        
+        # Check which centers fall within the spatial mask
+        valid_mask = spatial_mask[centers_y, centers_x]
+        valid_indices = np.where(valid_mask)[0]
+        
+        return torch.from_numpy(valid_indices).long()
 
     def __getitem__(self, index):
         block_gt = self.gt_blocks[index]

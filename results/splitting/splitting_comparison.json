@@ -1,0 +1,464 @@
+{
+  "bocknet|spatial|Almond": {
+    "roc_auc": 0.936997397725549,
+    "pr_auc": 0.4989965205016246,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.18396782875061035,
+    "n_params": 736576,
+    "max_vram_gb": 5.5978
+  },
+  "bocknet|spatial|Pistachio": {
+    "roc_auc": 0.860941042276372,
+    "pr_auc": 0.3623511989994646,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.1833667755126953,
+    "n_params": 736576,
+    "max_vram_gb": 5.5974
+  },
+  "bocknet|spatial|GarlicStems": {
+    "roc_auc": 0.9187712668369687,
+    "pr_auc": 0.2960726047542177,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.18395757675170898,
+    "n_params": 736576,
+    "max_vram_gb": 5.5974
+  },
+  "bocknet|random|Almond": {
+    "roc_auc": 0.9072842620053109,
+    "pr_auc": 0.44625587109975345,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.18377184867858887,
+    "n_params": 736576,
+    "max_vram_gb": 5.5974
+  },
+  "bocknet|random|Pistachio": {
+    "roc_auc": 0.8689382507838164,
+    "pr_auc": 0.3743196507274548,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.18376541137695312,
+    "n_params": 736576,
+    "max_vram_gb": 5.5978
+  },
+  "bocknet|random|GarlicStems": {
+    "roc_auc": 0.9274874091166806,
+    "pr_auc": 0.3018494675565908,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.1842350959777832,
+    "n_params": 736576,
+    "max_vram_gb": 5.5978
+  },
+  "our|spatial|Almond": {
+    "roc_auc": 0.9749335073828098,
+    "pr_auc": 0.8592665524160762,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.37438,
+    "n_params": 47339,
+    "max_vram_gb": 0.37883472442626953
+  },
+  "our|spatial|Pistachio": {
+    "roc_auc": 0.9623193457270693,
+    "pr_auc": 0.8476300920143172,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.329198,
+    "n_params": 47339,
+    "max_vram_gb": 0.37883472442626953
+  },
+  "our|spatial|GarlicStems": {
+    "roc_auc": 0.9940419974753314,
+    "pr_auc": 0.9256693727167454,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.477905,
+    "n_params": 47339,
+    "max_vram_gb": 0.37883472442626953
+  },
+  "our|random|Almond": {
+    "roc_auc": 0.9769315300913033,
+    "pr_auc": 0.870469709682874,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.367849,
+    "n_params": 47339,
+    "max_vram_gb": 0.3788719177246094
+  },
+  "our|random|Pistachio": {
+    "roc_auc": 0.9762246149264978,
+    "pr_auc": 0.8809697948724944,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.334684,
+    "n_params": 47339,
+    "max_vram_gb": 0.3788719177246094
+  },
+  "our|random|GarlicStems": {
+    "roc_auc": 0.9940822512412346,
+    "pr_auc": 0.9282136853787324,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 2.389246,
+    "n_params": 47339,
+    "max_vram_gb": 0.3788719177246094
+  },
+  "pa2e|spatial|Almond": {
+    "roc_auc": 0.899008810371693,
+    "pr_auc": 0.5197593051035652,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.805388,
+    "n_params": 346872,
+    "max_vram_gb": 0.10876798629760742
+  },
+  "pa2e|spatial|Pistachio": {
+    "roc_auc": 0.9333632138732897,
+    "pr_auc": 0.7500402168624198,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.825913,
+    "n_params": 346872,
+    "max_vram_gb": 0.10876798629760742
+  },
+  "pa2e|spatial|GarlicStems": {
+    "roc_auc": 0.993905121925312,
+    "pr_auc": 0.9220725746046381,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.80996,
+    "n_params": 346872,
+    "max_vram_gb": 0.10876798629760742
+  },
+  "pa2e|random|Almond": {
+    "roc_auc": 0.9097262123174757,
+    "pr_auc": 0.5933289671546232,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.849377,
+    "n_params": 346872,
+    "max_vram_gb": 0.1061558723449707
+  },
+  "pa2e|random|Pistachio": {
+    "roc_auc": 0.6279513103822891,
+    "pr_auc": 0.4944155992669761,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.814172,
+    "n_params": 346872,
+    "max_vram_gb": 0.1061558723449707
+  },
+  "pa2e|random|GarlicStems": {
+    "roc_auc": 0.9960834119509971,
+    "pr_auc": 0.9281082284628938,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 3.772294,
+    "n_params": 346872,
+    "max_vram_gb": 0.1061558723449707
+  },
+  "gthad|spatial|Almond": {
+    "roc_auc": 0.9317858696805719,
+    "pr_auc": 0.5923030957779293,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.392334222793579,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "gthad|spatial|Pistachio": {
+    "roc_auc": 0.9328292847126152,
+    "pr_auc": 0.6097034218052608,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.223841428756714,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "gthad|spatial|GarlicStems": {
+    "roc_auc": 0.9774153692992535,
+    "pr_auc": 0.7262806551804022,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.215285062789917,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "gthad|random|Almond": {
+    "roc_auc": 0.9118623060723386,
+    "pr_auc": 0.5875195989450953,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.211656093597412,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "gthad|random|Pistachio": {
+    "roc_auc": 0.9325157429212636,
+    "pr_auc": 0.6101085071168638,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.253524541854858,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "gthad|random|GarlicStems": {
+    "roc_auc": 0.9805275043323618,
+    "pr_auc": 0.7573125624528735,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 4.263176441192627,
+    "n_params": 104736,
+    "max_vram_gb": 13.207299709320068
+  },
+  "superad|spatial|Almond": {
+    "roc_auc": 0.8039246441798888,
+    "pr_auc": 0.4280723662737965,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07756638526916504,
+    "n_params": 247424,
+    "max_vram_gb": 2.5237860679626465
+  },
+  "superad|spatial|Pistachio": {
+    "roc_auc": 0.9363066379804337,
+    "pr_auc": 0.4658290624319832,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07720518112182617,
+    "n_params": 247424,
+    "max_vram_gb": 2.5241827964782715
+  },
+  "superad|spatial|GarlicStems": {
+    "roc_auc": 0.8969872372516288,
+    "pr_auc": 0.29951406044262785,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07710552215576172,
+    "n_params": 247424,
+    "max_vram_gb": 2.5237860679626465
+  },
+  "superad|random|Almond": {
+    "roc_auc": 0.6201295066255024,
+    "pr_auc": 0.3010359246548665,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07786846160888672,
+    "n_params": 247424,
+    "max_vram_gb": 2.5237860679626465
+  },
+  "superad|random|Pistachio": {
+    "roc_auc": 0.8352278045340908,
+    "pr_auc": 0.45550347751324727,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07738327980041504,
+    "n_params": 247424,
+    "max_vram_gb": 2.5241827964782715
+  },
+  "superad|random|GarlicStems": {
+    "roc_auc": 0.8824430158323475,
+    "pr_auc": 0.29695140172233186,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.07725715637207031,
+    "n_params": 247424,
+    "max_vram_gb": 2.5237860679626465
+  },
+  "autoad|spatial|Almond": {
+    "roc_auc": 0.7998894839308988,
+    "pr_auc": 0.04519276764152588,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.05410456657409668,
+    "n_params": 3276896,
+    "max_vram_gb": 1.9741
+  },
+  "autoad|spatial|Pistachio": {
+    "roc_auc": 0.8831961705654846,
+    "pr_auc": 0.4039936551173374,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.054160356521606445,
+    "n_params": 3276896,
+    "max_vram_gb": 1.973
+  },
+  "autoad|spatial|GarlicStems": {
+    "roc_auc": 0.9604959404539595,
+    "pr_auc": 0.6264995642350599,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.054113149642944336,
+    "n_params": 3276896,
+    "max_vram_gb": 1.9736
+  },
+  "autoad|random|Almond": {
+    "roc_auc": 0.8769940863773118,
+    "pr_auc": 0.29503782127152045,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.05420827865600586,
+    "n_params": 3276896,
+    "max_vram_gb": 1.9734
+  },
+  "autoad|random|Pistachio": {
+    "roc_auc": 0.7618368998107135,
+    "pr_auc": 0.04140758830989206,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.05418586730957031,
+    "n_params": 3276896,
+    "max_vram_gb": 1.973
+  },
+  "autoad|random|GarlicStems": {
+    "roc_auc": 0.9646981764460167,
+    "pr_auc": 0.6331745557442899,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.054065704345703125,
+    "n_params": 3276896,
+    "max_vram_gb": 1.9732
+  },
+  "otad|spatial|Almond": {
+    "roc_auc": 0.4368259435516285,
+    "pr_auc": 0.015353853728290096,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.13054990768432617,
+    "n_params": 328544,
+    "max_vram_gb": 8.5303
+  },
+  "otad|spatial|Pistachio": {
+    "roc_auc": 0.4499952338233231,
+    "pr_auc": 0.02310886122037732,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.1309216022491455,
+    "n_params": 328544,
+    "max_vram_gb": 8.5303
+  },
+  "otad|spatial|GarlicStems": {
+    "roc_auc": 0.5104266756918476,
+    "pr_auc": 0.04891379362262226,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.1312563419342041,
+    "n_params": 328544,
+    "max_vram_gb": 8.5303
+  },
+  "otad|random|Almond": {
+    "roc_auc": 0.7068857272060445,
+    "pr_auc": 0.12443415349033125,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.13017964363098145,
+    "n_params": 328544,
+    "max_vram_gb": 8.4709
+  },
+  "otad|random|Pistachio": {
+    "roc_auc": 0.6611195252465792,
+    "pr_auc": 0.08535920664626136,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.1295149326324463,
+    "n_params": 328544,
+    "max_vram_gb": 8.4709
+  },
+  "otad|random|GarlicStems": {
+    "roc_auc": 0.6947982964867936,
+    "pr_auc": 0.08025277752371174,
+    "detectmap_shape": [
+      400,
+      512
+    ],
+    "infer_time_sec": 0.12990736961364746,
+    "n_params": 328544,
+    "max_vram_gb": 8.4709
+  }
+}

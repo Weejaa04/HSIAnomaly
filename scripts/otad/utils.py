@@ -52,13 +52,59 @@ def calibrate_hsi(
     return np.clip((data - dark) / (white - dark + 1e-8), 0, 1)
 
 
-def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", device=None):
+def get_spatial_train_val_mask(H=400, W=512):
+    """Get spatial guillotine masks for train and validation zones.
+    
+    Returns:
+        train_mask: (H, W) boolean mask
+        val_mask: (H, W) boolean mask
+    """
+    train_mask = np.zeros((H, W), dtype=bool)
+    train_mask[50:200, :] = True
+    
+    val_mask = np.zeros((H, W), dtype=bool)
+    val_mask[300:350, :] = True
+    
+    return train_mask, val_mask
+
+
+def get_random_train_val_mask(H, W, seed=42):
+    """Generate random masks for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_mask: (H, W) boolean mask
+        val_mask: (H, W) boolean mask
+    """
+    np.random.seed(seed)
+    rand_map = np.random.rand(H, W)
+    
+    train_mask = rand_map < 0.375
+    val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
+    
+    return train_mask, val_mask
+
+
+def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", device=None, split_method: str = "spatial"):
     """Load, calibrate and return data for a food type.
+
+    Args:
+        food_type: Food type name
+        base_dir: Base directory for data
+        device: Torch device
+        split_method: "spatial" (guillotine) or "random" (random sampling)
 
     Returns:
         img: (1, B, H, W) tensor
         gt: (H, W) binary ground truth
         H, W, B: spatial and spectral dimensions
+        train_mask: (H, W) boolean mask
+        val_mask: (H, W) boolean mask
     """
     base = f"{base_dir}/{food_type}"
 
@@ -81,4 +127,10 @@ def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", devic
     if device is not None:
         img_var = img_var.to(device)
 
-    return img_var, gt, H, W, B
+    # Generate masks based on split method
+    if split_method == "random":
+        train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
+    else:  # spatial
+        train_mask, val_mask = get_spatial_train_val_mask(H, W)
+
+    return img_var, gt, H, W, B, train_mask, val_mask

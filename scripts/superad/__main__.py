@@ -67,6 +67,7 @@ def benchmark_food_type(
     beta: float = 1.0,
     th_idx: float = 0.25,
     loss_type: str = "OBPM",
+    split_method: str = "spatial",
     **kwargs,
 ) -> dict:
     """
@@ -86,12 +87,13 @@ def benchmark_food_type(
         beta: OBPM loss beta parameter
         th_idx: OBPM loss threshold index
         loss_type: Loss type ('OBPM', 'l1', 'l2')
+        split_method: "spatial" (guillotine) or "random" (random sampling)
 
     Returns:
         dict: Result dictionary with roc_auc, pr_auc, etc.
     """
     print(f"\n{'=' * 70}")
-    print(f"SUPERAD BENCHMARK: {food_type}")
+    print(f"SUPERAD BENCHMARK: {food_type} (split_method={split_method})")
     print(f"{'=' * 70}")
 
     total_start_time = time.time()
@@ -104,7 +106,7 @@ def benchmark_food_type(
     print(f"Loading {food_type} data...")
     train_data, test_data, test_labels, segments, H, W, B, train_mask, val_mask = (
         get_food_data(
-            food_type, base_dir, n_segments=n_segments, compactness=compactness
+            food_type, base_dir, n_segments=n_segments, compactness=compactness, split_method=split_method
         )
     )
 

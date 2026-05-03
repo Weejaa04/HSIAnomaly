@@ -63,7 +63,32 @@ class HSISuperpixelDataset(Dataset):
         }
 
 
-def get_food_data(food_type, base_dir, n_segments=500, compactness=10):
+def get_random_train_val_masks(H, W, seed=42):
+    """Generate random masks for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_mask: (1, 1, H, W) tensor
+        val_mask: (1, 1, H, W) tensor
+    """
+    np.random.seed(seed)
+    rand_map = np.random.rand(H, W)
+    
+    train_mask = rand_map < 0.375
+    val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
+    
+    train_mask = torch.from_numpy(train_mask.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+    val_mask = torch.from_numpy(val_mask.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+    
+    return train_mask, val_mask
+
+
+def get_food_data(food_type, base_dir, n_segments=500, compactness=10, split_method="spatial"):
     base_path = os.path.join(base_dir, food_type)
 
     train_data_path = os.path.join(base_path, "Train", "data.hdr")
@@ -75,7 +100,11 @@ def get_food_data(food_type, base_dir, n_segments=500, compactness=10):
 
     H, W, B = train_data.shape
 
-    train_mask, val_mask = get_spatial_train_val_masks(H, W)
+    # Generate masks based on split method
+    if split_method == "random":
+        train_mask, val_mask = get_random_train_val_masks(H, W, seed=42)
+    else:  # spatial (guillotine)
+        train_mask, val_mask = get_spatial_train_val_masks(H, W)
 
     segments = compute_superpixels(
         train_data, n_segments=n_segments, compactness=compactness

@@ -52,15 +52,46 @@ def calibrate_hsi(
     return np.clip((data - dark) / (white - dark + 1e-8), 0, 1)
 
 
-def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", device=None):
+def get_random_train_val_mask(H, W, seed=42):
+    """Generate random masks for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_mask: (H, W) boolean mask for training
+        val_mask: (H, W) boolean mask for validation
+    """
+    np.random.seed(seed)
+    rand_map = np.random.rand(H, W)
+    
+    train_mask = rand_map < 0.375
+    val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
+    
+    train_mask = torch.from_numpy(train_mask).float()
+    val_mask = torch.from_numpy(val_mask).float()
+    
+    return train_mask, val_mask
+
+
+def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", device=None, split_method: str = "spatial"):
     """Load, calibrate and return data for a food type.
+
+    Args:
+        food_type: Food type name
+        base_dir: Base directory for data
+        device: Torch device
+        split_method: "spatial" (guillotine) or "random" (random sampling)
 
     Returns:
         img_var: (1, B, H, W) tensor
         gt: (H, W) binary ground truth
         H, W, B: spatial and spectral dimensions
-        train_mask: (H, W) mask for training region Y[50:200]
-        val_mask: (H, W) mask for validation region Y[300:350]
+        train_mask: (H, W) mask for training region
+        val_mask: (H, W) mask for validation region
     """
     base = f"{base_dir}/{food_type}"
 
@@ -82,11 +113,18 @@ def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", devic
         img_var = img_var.to(device)
     img_var = img_var.unsqueeze(0)
 
-    train_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
-    train_mask[50:200, :] = 1.0
-
-    val_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
-    val_mask[300:350, :] = 1.0
+    # Generate masks based on split method
+    if split_method == "random":
+        train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
+    else:  # spatial (guillotine)
+        train_mask = torch.zeros((H, W), dtype=torch.float32)
+        train_mask[50:200, :] = 1.0
+        val_mask = torch.zeros((H, W), dtype=torch.float32)
+        val_mask[300:350, :] = 1.0
+    
+    if device is not None:
+        train_mask = train_mask.to(device)
+        val_mask = val_mask.to(device)
 
     return img_var, gt, H, W, B, train_mask, val_mask
 

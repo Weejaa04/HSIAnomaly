@@ -38,6 +38,8 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
@@ -96,9 +98,10 @@ def benchmark_food_type(
     lossm: str = "l1",
     dry_run: bool = False,
     retrain: bool = True,
+    split_method: str = "spatial",
 ) -> dict:
 
-    print(f"\n{'=' * 70}\nBENCHMARKING: {food_type}\n{'=' * 70}")
+    print(f"\n{'=' * 70}\nBENCHMARKING: {food_type} (split_method={split_method})\n{'=' * 70}")
 
     # For dry run, use tight constraints to complete quickly while testing full pipeline
     if dry_run:
@@ -113,9 +116,11 @@ def benchmark_food_type(
 
     # ===== Load data =====
     img_tensor, gt, H, W, B, train_mask, val_mask = get_food_data(
-        food_type, base_dir, device=device
+        food_type, base_dir, device=device, split_method=split_method
     )
     print(f"Image: ({H}, {W}, {B})  |  Anomaly pixels: {int(gt.sum())} / {H * W}")
+    print(f"Split method: {split_method}")
+    print(f"Train pixels: {int(train_mask.sum())}  |  Val pixels: {int(val_mask.sum())}")
 
     # ===== Model =====
     net = BockNet(blindspot=blindspot, nch_in=B, nch_out=B, nch_ker=nch_ker).to(device)

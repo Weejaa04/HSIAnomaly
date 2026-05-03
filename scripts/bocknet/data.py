@@ -13,13 +13,43 @@ def calibrate_hsi(data: np.ndarray, white_ref_path: str, dark_ref_path: str) -> 
     dark  = np.array(spectral.open_image(dark_ref_path).load(),  dtype=np.float32).mean(axis=0)
     return np.clip((data - dark) / (white - dark + 1e-8), 0, 1)
 
-def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', device=None):
+def get_random_train_val_mask(H, W, seed=42):
+    """Generate random masks for training and validation.
+    
+    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
+    
+    Args:
+        H, W: Image height and width
+        seed: Random seed for reproducibility
+    
+    Returns:
+        train_mask: (H, W) boolean mask for training
+        val_mask: (H, W) boolean mask for validation
+    """
+    np.random.seed(seed)
+    rand_map = np.random.rand(H, W)
+    
+    train_mask = rand_map < 0.375
+    val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
+    
+    train_mask = torch.from_numpy(train_mask).float()
+    val_mask = torch.from_numpy(val_mask).float()
+    
+    return train_mask, val_mask
+
+def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', device=None, split_method: str = "spatial"):
     """Load, calibrate and return (img_var, gt, H, W, B) for a food type.
     Note: BockNet expects inputs in (1, B, H, W).
     
     Also returns spatial masks for the Global Full-Image Model paradigm:
-    - train_mask: Y[50:200]  (exclusive zone for weight updates)
-    - val_mask:   Y[300:350] (for validation loss only)
+    - train_mask: Y[50:200]  (exclusive zone for weight updates) [spatial] or random [random]
+    - val_mask:   Y[300:350] (for validation loss only) [spatial] or random [random]
+    
+    Args:
+        food_type: Food type name
+        base_dir: Base directory for data
+        device: Torch device
+        split_method: "spatial" (guillotine) or "random" (random sampling)
     """
     base = f'{base_dir}/{food_type}'
 
@@ -42,12 +72,18 @@ def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', devic
         img_var = img_var.to(device)
     img_var = img_var.unsqueeze(0)  # (1, B, H, W)
 
-    # Create spatial masks for the Global Full-Image Model paradigm
-    train_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
-    train_mask[50:200, :] = 1.0
+    # Create spatial masks based on split method
+    if split_method == "random":
+        train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
+    else:  # spatial (guillotine)
+        train_mask = torch.zeros((H, W), dtype=torch.float32)
+        train_mask[50:200, :] = 1.0
+        val_mask = torch.zeros((H, W), dtype=torch.float32)
+        val_mask[300:350, :] = 1.0
     
-    val_mask = torch.zeros((H, W), dtype=torch.float32, device=device)
-    val_mask[300:350, :] = 1.0
+    if device is not None:
+        train_mask = train_mask.to(device)
+        val_mask = val_mask.to(device)
 
     return img_var, gt, H, W, B, train_mask, val_mask
 

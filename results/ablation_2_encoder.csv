@@ -1,9 +1,0 @@
-variant,food,roc_auc,pr_auc,converged_epoch,train_time_sec,infer_time_sec,n_params
-CNN / Conv1D (*),Almond,0.9732,0.8565,90,312.9391,2.2310,47339
-CNN / Conv1D (*),Pistachio,0.9601,0.8718,118,400.2035,2.2002,47339
-CNN / Conv1D (*),GarlicStems,0.9953,0.9355,77,279.1596,2.2139,47339
-CNN / Conv1D (*),AVG,0.9762,0.8879,95.0000,330.7674,2.2150,47339.0000
-Linear,Almond,0.7503,0.7374,91,198.9447,2.0473,86664
-Linear,Pistachio,0.7211,0.7169,121,256.5185,2.0842,86664
-Linear,GarlicStems,0.8124,0.7853,100,217.8499,2.0343,86664
-Linear,AVG,0.7613,0.7466,104.0000,224.4377,2.0553,86664.0000

@@ -21,32 +21,56 @@ import os
 import sys
 import time
 import traceback
+import re
 import numpy as np
 
+
+def parse_duration(value):
+    """Parse a duration string like '30s', '1m', '5m' into seconds."""
+    if not isinstance(value, str):
+        raise argparse.ArgumentTypeError("must be a string")
+    m = re.match(r'^(\d+)\s*([sm]?)$', value)
+    if not m:
+        raise argparse.ArgumentTypeError(f"invalid duration: '{value}'. Use e.g. 30s, 1m, 5m")
+    num = int(m.group(1))
+    unit = m.group(2) or 's'
+    return num * 60 if unit == 'm' else num
+
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
-# Main architectures only (skip ablation, sglnet)
 MAIN_ARCHS = [
     "bocknet",
     "our",
     "pa2e",
     "gthad",
     "superad",
+    "sglnet",
     "autoad",
     "otad",
 ]
+ARCH_RESULT_FILE = {
+    "bocknet": "bocknet.json",
+    "our": "our.json",
+    "pa2e": "pa2e.json",
+    "gthad": "gthad.json",
+    "superad": "superad.json",
+    "sglnet": "sglnet.json",
+    "autoad": "autoad.json",
+    "otad": "otad.json",
+}
 ARCH_MODULE_MAP = {
     "bocknet": "scripts.bocknet.__main__",
     "our": "scripts.our.__main__",
     "pa2e": "scripts.pa2e.__main__",
     "gthad": "scripts.gthad.__main__",
     "superad": "scripts.superad.__main__",
+    "sglnet": "scripts.sglnet.__main__",
     "autoad": "scripts.autoad.__main__",
     "otad": "scripts.otad.__main__",
 }
 
 
 def run_arch_with_split(
-    arch: str, food_types: list, split_method: str, output_dir: str, extra_kwargs: dict
+    arch: str, food_types: list, split_method: str, output_dir: str, extra_kwargs: dict, cooldown: int = 0
 ) -> dict:
     """
     Import and call benchmark_food_type for each food type with a specific split method.
@@ -69,7 +93,7 @@ def run_arch_with_split(
     bench_fn = module.benchmark_food_type
 
     arch_results = {}
-    for ft in food_types:
+    for fi, ft in enumerate(food_types):
         try:
             kwargs = {
                 **extra_kwargs.get("common", {}),
@@ -82,56 +106,62 @@ def run_arch_with_split(
             print(f"\n❌ [{arch}] [{split_method}] Error on {ft}: {e}")
             traceback.print_exc()
 
+        # Clear GPU VRAM between food types
+        if fi < len(food_types) - 1:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+            if cooldown > 0:
+                print(f"  Cooling down GPU for {cooldown}s...")
+                time.sleep(cooldown)
+
     return arch_results
 
 
 def print_comparison_summary(all_results: dict):
     """
-    Print a comparison table showing metrics for both spatial and random splits.
-    
-    Format:
-    | Architecture | Split Method | PR-AUC (Almond) | ROC-AUC (Almond) |
+    Print comparison tables showing metrics per food type for both spatial and random splits.
     """
     archs = sorted(set(k.split("|")[0].strip() for k in all_results.keys()))
     food_types = sorted(
-        set(k.split("|")[1].strip() for k in all_results.keys() if "|" in k)
+        set(k.split("|")[2].strip() for k in all_results.keys() if "|" in k)
     )
 
     if not food_types:
         print("No results to display")
         return
 
-    # Pick the first food type for summary (or user can modify)
-    ft = food_types[0]
-
     col = 14
 
     print(f"\n{'=' * 100}\n{'SPLITTING ANALYSIS SUMMARY':^100}\n{'=' * 100}")
-    print(f"\nFood Type: {ft}\n")
 
-    print(f"{'Architecture':<20}", end="")
-    print(f"  {'Split Method':<15}", end="")
-    print(f"  {'PR-AUC':>{col}}", end="")
-    print(f"  {'ROC-AUC':>{col}}")
-    print("─" * 100)
+    for ft in food_types:
+        print(f"\nFood Type: {ft}\n")
 
-    for arch in sorted(archs):
-        for split_method in ["spatial", "random"]:
-            key = f"{arch}|{split_method}|{ft}"
-            if key in all_results:
-                r = all_results[key]
-                pr = r.get("pr_auc", float("nan"))
-                roc = r.get("roc_auc", float("nan"))
-                
-                # Handle cases where result has nested structure
-                if isinstance(r, dict) and "original_model" in r:
-                    pr = r["original_model"].get("pr_auc", float("nan"))
-                    roc = r["original_model"].get("roc_auc", float("nan"))
+        print(f"{'Architecture':<20}", end="")
+        print(f"  {'Split Method':<15}", end="")
+        print(f"  {'PR-AUC':>{col}}", end="")
+        print(f"  {'ROC-AUC':>{col}}")
+        print("─" * 100)
 
-                pr_str = f"{pr:.4f}" if not np.isnan(pr) else "N/A"
-                roc_str = f"{roc:.4f}" if not np.isnan(roc) else "N/A"
+        for arch in sorted(archs):
+            for split_method in ["spatial", "random"]:
+                key = f"{arch}|{split_method}|{ft}"
+                if key in all_results:
+                    r = all_results[key]
+                    pr = r.get("pr_auc", float("nan"))
+                    roc = r.get("roc_auc", float("nan"))
+                    
+                    # Handle cases where result has nested structure
+                    if isinstance(r, dict) and "original_model" in r:
+                        pr = r["original_model"].get("pr_auc", float("nan"))
+                        roc = r["original_model"].get("roc_auc", float("nan"))
 
-                print(f"{arch:<20}  {split_method:<15}  {pr_str:>{col}}  {roc_str:>{col}}")
+                    pr_str = f"{pr:.4f}" if not np.isnan(pr) else "N/A"
+                    roc_str = f"{roc:.4f}" if not np.isnan(roc) else "N/A"
+
+                    print(f"{arch:<20}  {split_method:<15}  {pr_str:>{col}}  {roc_str:>{col}}")
 
     print()
 
@@ -188,6 +218,18 @@ Examples:
         default="./results/splitting",
         help="Directory for JSON results (default: ./results/splitting)",
     )
+    parser.add_argument(
+        "--benchmark-dir",
+        default="./results",
+        help="Directory with existing benchmark results to reuse for spatial split (default: ./results)",
+    )
+    parser.add_argument(
+        "--cooldown",
+        type=parse_duration,
+        default="0s",
+        metavar="DURATION",
+        help="GPU cooldown between architectures (e.g. 30s, 1m, 5m). Default: 0s",
+    )
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -231,6 +273,7 @@ Examples:
     print(f"  Split methods : {', '.join(split_methods)}")
     print(f"  Retrain       : {args.retrain}")
     print(f"  Output dir    : {args.output_dir}")
+    print(f"  Benchmark dir : {args.benchmark_dir} (reused for spatial split)")
     print(f"{'=' * 100}")
 
     # ── run ─────────────────────────────────────────────────────────────
@@ -240,10 +283,21 @@ Examples:
     for arch in archs:
         arch_start = time.time()
         for split_method in split_methods:
+            if split_method == "spatial":
+                # Try to load existing benchmark results instead of re-running
+                bench_path = os.path.join(args.benchmark_dir, ARCH_RESULT_FILE[arch])
+                if os.path.isfile(bench_path):
+                    with open(bench_path) as f:
+                        arch_results = json.load(f)
+                    print(f"\n  ✅ [{arch}] spatial split loaded from {bench_path}")
+                    for ft, result in arch_results.items():
+                        key = f"{arch}|{split_method}|{ft}"
+                        all_results[key] = result
+                    continue
+
             arch_results = run_arch_with_split(
-                arch, food_types, split_method, args.output_dir, extra_kwargs
+                arch, food_types, split_method, args.output_dir, extra_kwargs, args.cooldown
             )
-            # Store with combined key: arch|split_method|food_type
             for ft, result in arch_results.items():
                 key = f"{arch}|{split_method}|{ft}"
                 all_results[key] = result

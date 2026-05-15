@@ -10,6 +10,7 @@ Usage:
     python benchmark.py --only gt-had         # run a single architecture
 """
 
+# (imports keep the same)
 import argparse
 import importlib
 import json
@@ -17,7 +18,23 @@ import os
 import sys
 import time
 import traceback
+import re
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
+def parse_duration(value):
+    """Parse a duration string like '30s', '1m', '5m' into seconds."""
+    if not isinstance(value, str):
+        raise argparse.ArgumentTypeError("must be a string")
+    m = re.match(r'^(\d+)\s*([sm]?)$', value)
+    if not m:
+        raise argparse.ArgumentTypeError(f"invalid duration: '{value}'. Use e.g. 30s, 1m, 5m")
+    num = int(m.group(1))
+    unit = m.group(2) or 's'
+    return num * 60 if unit == 'm' else num
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
 ALL_ARCHS = [
@@ -55,7 +72,7 @@ ARCH_RESULT_FILE = {
 }
 
 
-def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict) -> dict:
+def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict, cooldown: int = 0) -> dict:
     """Import and call benchmark_food_type for each food type in an architecture."""
     print(f"\n{'#' * 80}")
     print(f"# ARCHITECTURE: {arch}")
@@ -65,15 +82,27 @@ def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict) -
     bench_fn = module.benchmark_food_type
 
     arch_results = {}
-    for ft in food_types:
+    anomaly_dir = os.path.join(output_dir, 'anomaly-map')
+    os.makedirs(anomaly_dir, exist_ok=True)
+    for fi, ft in enumerate(food_types):
         try:
             # Merge architecture-specific kwargs with common kwargs
-            kwargs = {**extra_kwargs.get("common", {}), **extra_kwargs.get(arch, {})}
+            kwargs = {**extra_kwargs.get("common", {}), **extra_kwargs.get(arch, {}), "anomaly_dir": anomaly_dir}
             result = bench_fn(ft, **kwargs)
             arch_results[ft] = result
         except Exception as e:
             print(f"\n❌ [{arch}] Error on {ft}: {e}")
             traceback.print_exc()
+
+        # Clear GPU VRAM between food types
+        if fi < len(food_types) - 1:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+            if cooldown > 0:
+                print(f"  Cooling down GPU for {cooldown}s...")
+                time.sleep(cooldown)
 
     # Save per-architecture JSON
     os.makedirs(output_dir, exist_ok=True)
@@ -203,6 +232,131 @@ def print_summary(all_results: dict):
     print()
 
 
+def plot_curves(all_results: dict, output_dir: str):
+    """Plot ROC/PR curves, anomaly maps, and box plots per food type."""
+    food_types = sorted({ft for results in all_results.values() for ft in results})
+    archs = list(all_results.keys())
+    colors = plt.cm.tab10(np.linspace(0, 1, len(archs)))
+
+    plot_dir = os.path.join(output_dir, 'plot')
+    anomaly_dir = os.path.join(output_dir, 'anomaly-map')
+    os.makedirs(plot_dir, exist_ok=True)
+    os.makedirs(anomaly_dir, exist_ok=True)
+
+    for ft in food_types:
+        # ── ROC Curve ────────────────────────────────────────────────────
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot([0, 1], [0, 1], 'k--', lw=1, label='Random (AUC=0.5)')
+        for arch, color in zip(archs, colors):
+            r = all_results[arch].get(ft)
+            if r is None or "fpr" not in r:
+                continue
+            roc_auc = r.get("roc_auc", float("nan"))
+            ax.plot(r["fpr"], r["tpr"], color=color, lw=1.5, label=f"{arch} (AUC={roc_auc:.4f})")
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title(f'ROC Curves — {ft}')
+        ax.legend(fontsize=7, loc='lower right')
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        roc_path = os.path.join(plot_dir, f"roc_curve_{ft}.png")
+        fig.savefig(roc_path, dpi=150)
+        plt.close(fig)
+        print(f"  ROC curve saved → {roc_path}")
+
+        # ── PR Curve ─────────────────────────────────────────────────────
+        fig, ax = plt.subplots(figsize=(8, 6))
+        for arch, color in zip(archs, colors):
+            r = all_results[arch].get(ft)
+            if r is None or "precision" not in r:
+                continue
+            pr_auc = r.get("pr_auc", float("nan"))
+            ax.plot(r["recall"], r["precision"], color=color, lw=1.5, label=f"{arch} (AP={pr_auc:.4f})")
+        ax.set_xlabel('Recall')
+        ax.set_ylabel('Precision')
+        ax.set_title(f'PR Curves — {ft}')
+        ax.legend(fontsize=7, loc='lower left')
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        pr_path = os.path.join(plot_dir, f"pr_curve_{ft}.png")
+        fig.savefig(pr_path, dpi=150)
+        plt.close(fig)
+        print(f"  PR curve saved → {pr_path}")
+
+        # ── Anomaly Map Heatmaps ─────────────────────────────────────────
+        for arch in archs:
+            score_path = os.path.join(anomaly_dir, f'{arch}_{ft}_scores.npy')
+            if not os.path.exists(score_path):
+                continue
+            scores = np.load(score_path)
+            smin, smax = scores.min(), scores.max()
+            if smax > smin:
+                scores = (scores - smin) / (smax - smin)
+            fig, ax = plt.subplots(figsize=(8, 6))
+            im = ax.imshow(scores, cmap='hot', aspect='auto')
+            plt.colorbar(im, ax=ax, label='Normalized Score [0,1]')
+            ax.set_title(f'{arch} — {ft} Anomaly Map')
+            ax.set_xlabel('Width')
+            ax.set_ylabel('Height')
+            fig.tight_layout()
+            map_path = os.path.join(anomaly_dir, f'{arch}_{ft}_map.png')
+            fig.savefig(map_path, dpi=150)
+            plt.close(fig)
+        print(f"  Anomaly maps saved → {anomaly_dir}/")
+
+        # ── Box Plot: anomaly vs normal per architecture ─────────────────
+        fig, ax = plt.subplots(figsize=(10, 6))
+        label_path = os.path.join(anomaly_dir, f'{ft}_labels.npy')
+        if os.path.exists(label_path):
+            gt = np.load(label_path).astype(bool)
+            positions = []
+            labels_list = []
+            data_normal = []
+            data_anomaly = []
+            for i, arch in enumerate(archs):
+                score_path = os.path.join(anomaly_dir, f'{arch}_{ft}_scores.npy')
+                if not os.path.exists(score_path):
+                    continue
+                scores = np.load(score_path)
+                # Normalize per architecture to [0,1] for comparable box plots
+                smin, smax = scores.min(), scores.max()
+                if smax > smin:
+                    scores = (scores - smin) / (smax - smin)
+                else:
+                    scores = np.zeros_like(scores)
+                scores_flat = scores.flatten()
+                gt_flat = gt.flatten() if gt.shape == scores.shape else gt.flatten()[:len(scores_flat)]
+                mask = gt_flat[:len(scores_flat)]
+                norm = scores_flat[~mask]
+                anom = scores_flat[mask]
+                if len(norm) > 0 and len(anom) > 0:
+                    data_normal.append(norm)
+                    data_anomaly.append(anom)
+                    positions.append(i)
+                    labels_list.append(arch)
+            if data_normal:
+                bp1 = ax.boxplot(data_normal, positions=[p - 0.2 for p in positions],
+                                 widths=0.3, patch_artist=True,
+                                 boxprops=dict(facecolor='steelblue', alpha=0.7),
+                                 medianprops=dict(color='white'))
+                bp2 = ax.boxplot(data_anomaly, positions=[p + 0.2 for p in positions],
+                                 widths=0.3, patch_artist=True,
+                                 boxprops=dict(facecolor='crimson', alpha=0.7),
+                                 medianprops=dict(color='white'))
+                ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['Normal', 'Anomaly'], loc='upper right')
+                ax.set_xticks(positions)
+                ax.set_xticklabels(labels_list, fontsize=8)
+                ax.set_xlabel('Architecture')
+                ax.set_ylabel('Anomaly Score')
+                ax.set_title(f'Score Distribution — {ft}')
+                ax.grid(True, alpha=0.3, axis='y')
+                fig.tight_layout()
+                box_path = os.path.join(plot_dir, f'boxplot_{ft}.png')
+                fig.savefig(box_path, dpi=150)
+                print(f"  Box plot saved → {box_path}")
+            plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Full benchmark: run all HSI food anomaly architectures.",
@@ -256,6 +410,13 @@ Examples:
         default="./results",
         help="Directory for JSON results (default: ./results)",
     )
+    parser.add_argument(
+        "--cooldown",
+        type=parse_duration,
+        default="0s",
+        metavar="DURATION",
+        help="GPU cooldown between architectures (e.g. 30s, 1m, 5m). Default: 0s",
+    )
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -303,7 +464,7 @@ Examples:
 
     for arch in archs:
         arch_start = time.time()
-        all_results[arch] = run_arch(arch, food_types, args.output_dir, extra_kwargs)
+        all_results[arch] = run_arch(arch, food_types, args.output_dir, extra_kwargs, args.cooldown)
         elapsed = time.time() - arch_start
         print(f"\n⏱  [{arch}] total wall time: {elapsed:.1f}s")
 
@@ -317,6 +478,14 @@ Examples:
     print(f"✅ Combined results saved → {combined_path}")
 
     print_summary(all_results)
+
+    # ── plot curves ───────────────────────────────────────────────────────
+    print(f"\n{'=' * 80}")
+    print(f"  Generating plots (ROC/PR curves, anomaly maps, box plots)...")
+    print(f"  → results/plot/     : ROC/PR curves and box plots")
+    print(f"  → results/anomaly-map/ : anomaly score heatmaps")
+    print(f"{'=' * 80}")
+    plot_curves(all_results, args.output_dir)
 
 
 if __name__ == "__main__":

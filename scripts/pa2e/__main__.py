@@ -17,6 +17,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
+
 import numpy as np
 from datetime import datetime
 from scipy.ndimage import median_filter
@@ -128,7 +135,7 @@ def initialize_center(model, train_loader):
     return center
 
 
-def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-3, alpha=0.5, food_type=None, dry_run=False):
+def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-3, alpha=0.5, food_type=None, dry_run=False, suffix=None):
     """
     Phase 2: DSVDD-style manifold refinement + CosineAnnealingLR + Early Stopping.
     
@@ -218,7 +225,7 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-3, alpha
             break
     
     if food_type:
-        save_weights(model, food_type)
+        save_weights(model, food_type, suffix=suffix)
     
     return losses, center_losses, recon_losses, val_losses
 
@@ -258,12 +265,13 @@ def inference_dsvdd(model, test_loader, device, H, W):
 
 
 def evaluate(scores, labels):
-    """Compute ROC-AUC and PR-AUC."""
+    """Compute ROC-AUC and PR-AUC with full curve data."""
     roc_auc = roc_auc_score(labels, scores)
+    fpr, tpr, _ = roc_curve(labels, scores)
     precision, recall, _ = precision_recall_curve(labels, scores)
     pr_auc = auc(recall, precision)
     
-    return roc_auc, pr_auc
+    return roc_auc, pr_auc, fpr.tolist(), tpr.tolist(), precision.tolist(), recall.tolist()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -293,6 +301,7 @@ def benchmark_food_type(food_type: str,
     dry_run = kwargs.get('dry_run', dry_run)
     retrain = kwargs.get('retrain', retrain)
     split_method = kwargs.get('split_method', split_method)
+    suffix = '_random' if split_method == 'random' else ''
     
     print(f"\n{'='*80}")
     print(f"PA2E Benchmark: {food_type} (split_method={split_method})")
@@ -384,10 +393,10 @@ def benchmark_food_type(food_type: str,
     weights_loaded = False
     train_time_sec = 0.0
     
-    if not retrain and weights_exist(food_type):
+    if not retrain and weights_exist(food_type, suffix=suffix if suffix else None):
         print(f'\n[LoadWeights] Trained weights found. Loading {food_type} model...')
         model_ft = PA2EFT(model).to(device)
-        load_weights(model_ft, food_type, device)
+        load_weights(model_ft, food_type, device, suffix=suffix if suffix else None)
         weights_loaded = True
         phase1_losses = []
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = [], [], [], []
@@ -407,7 +416,7 @@ def benchmark_food_type(food_type: str,
         # ─── Phase 2: DSVDD-style Training with Early Stopping ──────────────────
         model_ft = PA2EFT(model).to(device)
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = train_phase2(
-            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type, dry_run=dry_run
+            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type, dry_run=dry_run, suffix=suffix if suffix else None
         )
         train_time_sec = time.time() - training_start
     else:
@@ -419,7 +428,7 @@ def benchmark_food_type(food_type: str,
     smoothed_scores, infer_time = inference_dsvdd(model_ft, test_loader, device, test_h, test_w)
     
     # ─── Evaluation ─────────────────────────────────────────────────────────
-    roc_auc, pr_auc = evaluate(smoothed_scores, binary_labels)
+    roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(smoothed_scores, binary_labels)
     
     # Calculate memory stats
     max_vram_gb = 0.0
@@ -437,6 +446,13 @@ def benchmark_food_type(food_type: str,
     print(f"{'='*80}")
     
     # Return results matching benchmark.py API (single model format)
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'pa2e_' + food_type + '_scores.npy'), smoothed_scores.reshape(test_h, test_w))
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, binary_labels.reshape(test_h, test_w).astype(np.uint8))
+
     result = {
         'roc_auc': float(roc_auc),
         'pr_auc': float(pr_auc),
@@ -444,6 +460,10 @@ def benchmark_food_type(food_type: str,
         'infer_time_sec': float(infer_time),
         'n_params': int(total_params),
         'max_vram_gb': float(max_vram_gb),
+        'fpr': fpr,
+        'tpr': tpr,
+        'precision': precision,
+        'recall': recall,
     }
     
     return result

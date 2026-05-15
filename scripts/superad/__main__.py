@@ -14,6 +14,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
+
 import numpy as np
 import time
 import random
@@ -92,6 +99,7 @@ def benchmark_food_type(
     Returns:
         dict: Result dictionary with roc_auc, pr_auc, etc.
     """
+    suffix = '_random' if split_method == 'random' else ''
     print(f"\n{'=' * 70}")
     print(f"SUPERAD BENCHMARK: {food_type} (split_method={split_method})")
     print(f"{'=' * 70}")
@@ -137,9 +145,9 @@ def benchmark_food_type(
     last_loss = None
     weights_loaded = False
 
-    if not retrain and weights_exist(food_type):
+    if not retrain and weights_exist(food_type, suffix=suffix):
         print(f"\n[LoadWeights] Loading trained weights...")
-        if load_weights(model, food_type, device):
+        if load_weights(model, food_type, device, suffix=suffix):
             weights_loaded = True
             train_time = 0.0
 
@@ -206,7 +214,7 @@ def benchmark_food_type(
         print(f"\nTraining time: {train_time:.2f}s")
         print(f"Epochs trained: {epoch}")
 
-        save_weights(model, food_type)
+        save_weights(model, food_type, suffix=suffix)
 
     print("\n=== Inference ===")
     model.eval()
@@ -231,11 +239,13 @@ def benchmark_food_type(
 
     roc_auc, detectmap = get_auc(HSI_old, HSI_new, gt)
 
-    from sklearn.metrics import average_precision_score
+    from sklearn.metrics import average_precision_score, roc_curve, precision_recall_curve
 
     test_labels_flat = gt.reshape(-1)
     binary_labels = (test_labels_flat != 2).astype(int)
     pr_auc = average_precision_score(binary_labels, detectmap.flatten())
+    fpr, tpr, _ = roc_curve(binary_labels, detectmap.flatten())
+    precision, recall, _ = precision_recall_curve(binary_labels, detectmap.flatten())
 
     peak_vram_mib = (
         torch.cuda.max_memory_allocated(device) / 1024**2
@@ -255,6 +265,13 @@ def benchmark_food_type(
         print(f"Peak VRAM: {max_vram_gb:.2f} GB")
     print(f"{'=' * 70}")
 
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'superad_' + food_type + '_scores.npy'), detectmap)
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, test_labels_flat.reshape(detectmap.shape).astype(np.uint8))
+
     return {
         "roc_auc": float(roc_auc),
         "pr_auc": float(pr_auc),
@@ -262,6 +279,10 @@ def benchmark_food_type(
         "infer_time_sec": float(infer_time),
         "n_params": int(total_params),
         "max_vram_gb": float(max_vram_gb),
+        "fpr": fpr.tolist(),
+        "tpr": tpr.tolist(),
+        "precision": precision.tolist(),
+        "recall": recall.tolist(),
     }
 
 

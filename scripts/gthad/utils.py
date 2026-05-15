@@ -116,13 +116,13 @@ def img2mask(img):
     return img
 
 
-def save_weights(model, food_type: str, arch='gthad'):
+def save_weights(model, food_type: str, arch='gthad', suffix=''):
     """Save model weights to disk."""
     weight_dir = os.path.join(
         os.path.dirname(__file__), '..', '..', 'weights', arch
     )
     os.makedirs(weight_dir, exist_ok=True)
-    weight_path = os.path.join(weight_dir, f'{food_type}.pt')
+    weight_path = os.path.join(weight_dir, f'{food_type}{suffix}.pt')
     
     if isinstance(model, dict):
         torch.save(model, weight_path)
@@ -131,10 +131,10 @@ def save_weights(model, food_type: str, arch='gthad'):
     print(f"✅ Weights saved to {weight_path}")
 
 
-def load_weights(model, food_type: str, device='cpu', arch='gthad'):
+def load_weights(model, food_type: str, device='cpu', arch='gthad', suffix=''):
     """Load model weights from disk."""
     weight_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', 'weights', arch, f'{food_type}.pt'
+        os.path.dirname(__file__), '..', '..', 'weights', arch, f'{food_type}{suffix}.pt'
     )
     
     if os.path.exists(weight_path):
@@ -152,10 +152,10 @@ def load_weights(model, food_type: str, device='cpu', arch='gthad'):
         return False
 
 
-def weights_exist(food_type: str, arch='gthad') -> bool:
+def weights_exist(food_type: str, arch='gthad', suffix='') -> bool:
     """Check if saved weights exist."""
     weight_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', 'weights', arch, f'{food_type}.pt'
+        os.path.dirname(__file__), '..', '..', 'weights', arch, f'{food_type}{suffix}.pt'
     )
     return os.path.exists(weight_path)
 

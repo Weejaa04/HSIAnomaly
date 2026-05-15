@@ -17,6 +17,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
+
 import numpy as np
 from datetime import datetime
 from scipy.ndimage import median_filter
@@ -146,7 +153,7 @@ def initialize_center(model, train_loader):
     return center
 
 
-def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.5, food_type=None):
+def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.5, food_type=None, suffix=''):
     """
     Phase 2: DSVDD-style manifold refinement + CosineAnnealingLR + Early Stopping.
     
@@ -237,7 +244,7 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha
             break
     
     if food_type:
-        save_weights(model, food_type)
+        save_weights(model, food_type, suffix=suffix)
     return losses, center_losses, recon_losses, val_losses
 
 
@@ -290,12 +297,13 @@ def inference_deep_knn(model, test_loader, memory_bank, device, H, W):
 
 
 def evaluate(scores, labels):
-    """Compute ROC-AUC and PR-AUC."""
+    """Compute ROC-AUC and PR-AUC with full curve data."""
     roc_auc = roc_auc_score(labels, scores)
+    fpr, tpr, _ = roc_curve(labels, scores)
     precision, recall, _ = precision_recall_curve(labels, scores)
     pr_auc = auc(recall, precision)
     
-    return roc_auc, pr_auc
+    return roc_auc, pr_auc, fpr.tolist(), tpr.tolist(), precision.tolist(), recall.tolist()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -317,6 +325,7 @@ def benchmark_food_type(food_type, **kwargs):
     dry_run = kwargs.get('dry_run', False)
     retrain = kwargs.get('retrain', True)
     split_method = kwargs.get('split_method', 'spatial')
+    suffix = '_random' if split_method == 'random' else ''
     print(f"\n{'='*80}")
     print(f"PA2E Benchmark: {food_type} (split_method={split_method})")
     print(f"{'='*80}")
@@ -407,11 +416,11 @@ def benchmark_food_type(food_type, **kwargs):
     weights_loaded = False
     train_time_sec = 0.0
     
-    if not retrain and weights_exist(food_type):
+    if not retrain and weights_exist(food_type, suffix=suffix):
         print(f'\n[LoadWeights] Trained weights found. Loading {food_type} model...')
         # Create PA2EFT wrapper and load final weights
         model_ft = PA2EFT(model).to(device)
-        load_weights(model_ft, food_type, device=device)
+        load_weights(model_ft, food_type, device=device, suffix=suffix)
         weights_loaded = True
         phase1_losses = []
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = [], [], [], []
@@ -431,7 +440,7 @@ def benchmark_food_type(food_type, **kwargs):
         # ── Phase 2: DSVDD-style Training with Early Stopping ──────────────────
         model_ft = PA2EFT(model).to(device)
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = train_phase2(
-            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type
+            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type, suffix=suffix
         )
         train_time_sec = time.time() - training_start
     else:
@@ -447,7 +456,7 @@ def benchmark_food_type(food_type, **kwargs):
     smoothed_scores, infer_time = inference_deep_knn(model_ft, test_loader, memory_bank, device, test_h, test_w)
     
     # ─── Evaluation ─────────────────────────────────────────────────────────
-    roc_auc, pr_auc = evaluate(smoothed_scores, binary_labels)
+    roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(smoothed_scores, binary_labels)
     
     # Calculate memory stats
     max_vram_gb = 0.0
@@ -464,6 +473,13 @@ def benchmark_food_type(food_type, **kwargs):
         print(f"Peak VRAM: {max_vram_gb:.2f} GB")
     print(f"{'='*80}")
     
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'our_' + food_type + '_scores.npy'), smoothed_scores.reshape(test_h, test_w))
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, binary_labels.reshape(test_h, test_w).astype(np.uint8))
+
     # Return results matching benchmark.py API (single model format)
     return {
         'roc_auc': float(roc_auc),
@@ -472,6 +488,10 @@ def benchmark_food_type(food_type, **kwargs):
         'infer_time_sec': float(infer_time),
         'n_params': int(total_params),
         'max_vram_gb': float(max_vram_gb),
+        'fpr': fpr,
+        'tpr': tpr,
+        'precision': precision,
+        'recall': recall,
     }
 
 

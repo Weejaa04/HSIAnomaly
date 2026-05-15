@@ -74,15 +74,15 @@ class UniversalEarlyStopping:
 WEIGHT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "weights", "superad")
 
 
-def save_weights(model, food_type: str):
+def save_weights(model, food_type: str, suffix=''):
     os.makedirs(WEIGHT_DIR, exist_ok=True)
-    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}.pt")
+    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}{suffix}.pt")
     torch.save(model.state_dict(), weight_path)
     print(f"Weights saved to {weight_path}")
 
 
-def load_weights(model, food_type: str, device="cpu"):
-    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}.pt")
+def load_weights(model, food_type: str, device="cpu", suffix=''):
+    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}{suffix}.pt")
     if os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location=device))
         print(f"Weights loaded from {weight_path}")
@@ -92,8 +92,8 @@ def load_weights(model, food_type: str, device="cpu"):
         return False
 
 
-def weights_exist(food_type: str) -> bool:
-    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}.pt")
+def weights_exist(food_type: str, suffix='') -> bool:
+    weight_path = os.path.join(WEIGHT_DIR, f"{food_type}{suffix}.pt")
     return os.path.exists(weight_path)
 
 

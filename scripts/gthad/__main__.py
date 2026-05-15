@@ -17,8 +17,15 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
+
 import numpy as np
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve, precision_recall_curve
 from scipy.ndimage import median_filter
 from tqdm import tqdm
 import time
@@ -86,6 +93,7 @@ def benchmark_food_type(food_type: str,
     Returns:
         dict with keys: roc_auc, pr_auc, detectmap_shape, infer_time_sec, n_params
     """
+    suffix = '_random' if split_method == 'random' else ''
     print(f"\n{'='*70}\nBENCHMARKING: {food_type} (GT-HAD, split_method={split_method})\n{'='*70}")
     
     # ─────────────────────────────────────────────────────────────────────────
@@ -146,8 +154,8 @@ def benchmark_food_type(food_type: str,
     print(f'Number of params: {n_params}')
     
     # Check if we should load pre-trained weights
-    if not retrain and weights_exist(food_type, arch='gthad'):
-        load_weights(net, food_type, device=device, arch='gthad')
+    if not retrain and weights_exist(food_type, arch='gthad', suffix=suffix):
+        load_weights(net, food_type, device=device, arch='gthad', suffix=suffix)
         train_time = 0.0
     else:
         # ─────────────────────────────────────────────────────────────────────
@@ -279,7 +287,7 @@ def benchmark_food_type(food_type: str,
         print(f'Training completed in {train_time:.2f} seconds')
         
         # Save weights
-        save_weights(net, food_type, arch='gthad')
+        save_weights(net, food_type, arch='gthad', suffix=suffix)
     
     # Define avg_pool (used in both training and inference paths)
     avg_pool = nn.AvgPool3d(kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1))
@@ -345,8 +353,12 @@ def benchmark_food_type(food_type: str,
     # METRICS
     # ─────────────────────────────────────────────────────────────────────────
     # gt was already converted to binary (0=normal, 1=anomaly) on line 105
-    roc_auc = roc_auc_score(gt.flatten(), residual_np.flatten())
-    pr_auc = average_precision_score(gt.flatten(), residual_np.flatten())
+    scores_flat = residual_np.flatten()
+    labels_flat = gt.flatten().astype(int)
+    roc_auc = roc_auc_score(labels_flat, scores_flat)
+    pr_auc = average_precision_score(labels_flat, scores_flat)
+    fpr, tpr, _ = roc_curve(labels_flat, scores_flat)
+    precision, recall, _ = precision_recall_curve(labels_flat, scores_flat)
     
     print(f'\nResults:')
     print(f'  ROC-AUC: {roc_auc:.4f}')
@@ -359,6 +371,13 @@ def benchmark_food_type(food_type: str,
     if torch.cuda.is_available():
         max_vram_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
     
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'gthad_' + food_type + '_scores.npy'), residual_np)
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, gt.astype(np.uint8))
+    
     return {
         'roc_auc': float(roc_auc),
         'pr_auc': float(pr_auc),
@@ -366,6 +385,10 @@ def benchmark_food_type(food_type: str,
         'infer_time_sec': infer_time,
         'n_params': n_params,
         'max_vram_gb': max_vram_gb,
+        'fpr': fpr.tolist(),
+        'tpr': tpr.tolist(),
+        'precision': precision.tolist(),
+        'recall': recall.tolist(),
     }
 
 

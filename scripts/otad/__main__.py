@@ -17,8 +17,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve, precision_recall_curve
 from tqdm import tqdm
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
 
 from .model import OTADNet, OTADDataset, BlockRestore, hyper_norm
 from .utils import get_food_data, SEED_DICT, UniversalEarlyStopping
@@ -82,9 +88,11 @@ def benchmark_food_type(
     dry_run: bool = False,
     retrain: bool = True,
     split_method: str = "spatial",
+    **kwargs,
 ) -> dict:
 
     print(f"\n{'=' * 70}\nBENCHMARKING: {food_type} (split_method={split_method})\n{'=' * 70}")
+    suffix = '_random' if split_method == 'random' else ''
 
     if dry_run:
         patience = 1
@@ -122,13 +130,14 @@ def benchmark_food_type(
 
     model_dir = f"./weights/otad"
     os.makedirs(model_dir, exist_ok=True)
-    model_path = f"{model_dir}/{food_type}.pt"
+    model_path = f"{model_dir}/{food_type}{suffix}.pt"
 
     block_size = patch_size * patch_grid
     data_set_train = OTADDataset(img_tensor, block_size=block_size, stride=stride, spatial_mask=train_mask)
     data_set_val = OTADDataset(img_tensor, block_size=block_size, stride=stride, spatial_mask=val_mask)
+    data_set_test = OTADDataset(img_tensor, block_size=block_size, stride=stride)
     train_loader = DataLoader(data_set_train, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(data_set_val, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(data_set_test, batch_size=batch_size, shuffle=False)
     block_restore = BlockRestore(block_size=block_size, stride=stride)
 
     if not retrain and os.path.exists(model_path):
@@ -207,7 +216,7 @@ def benchmark_food_type(
             res_map.append(res)
 
     res_map = torch.cat(res_map, dim=0)
-    res_map = block_restore(res_map, data_set_val.padding, H, W, valid_indices=data_set_val.valid_indices)
+    res_map = block_restore(res_map, data_set_test.padding, H, W, valid_indices=data_set_test.valid_indices)
     res_map = res_map[0].sum(0).cpu().numpy()
     res_map = hyper_norm(res_map)
 
@@ -229,8 +238,12 @@ def benchmark_food_type(
                 HSI_old[:, :, b].max() - HSI_old[:, :, b].min()
             )
 
-    roc_auc = roc_auc_score(gt.flatten(), res_map.flatten())
-    pr_auc = average_precision_score(gt.flatten(), res_map.flatten())
+    scores_flat = res_map.flatten()
+    labels_flat = gt.flatten().astype(int)
+    roc_auc = roc_auc_score(labels_flat, scores_flat)
+    pr_auc = average_precision_score(labels_flat, scores_flat)
+    fpr, tpr, _ = roc_curve(labels_flat, scores_flat)
+    precision, recall, _ = precision_recall_curve(labels_flat, scores_flat)
 
     print(
         f"ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}  Inference time={infer_time:.4f}s  Peak VRAM={peak_vram_mib:.1f} MiB"
@@ -245,6 +258,13 @@ def benchmark_food_type(
     print(f"{'Peak VRAM (MiB)':<25} {peak_vram_mib:>20.1f}")
     print(f"{'=' * 70}\n")
 
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'otad_' + food_type + '_scores.npy'), res_map)
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, gt.astype(np.uint8))
+
     return {
         "roc_auc": float(roc_auc),
         "pr_auc": float(pr_auc),
@@ -252,6 +272,10 @@ def benchmark_food_type(
         "infer_time_sec": infer_time,
         "n_params": params_total,
         "max_vram_gb": round(peak_vram_mib / 1024, 4),
+        "fpr": fpr.tolist(),
+        "tpr": tpr.tolist(),
+        "precision": precision.tolist(),
+        "recall": recall.tolist(),
     }
 
 

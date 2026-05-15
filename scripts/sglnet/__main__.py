@@ -17,6 +17,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
+# Force FP32 precision (disable TF32)
+torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.cudnn.allow_tf32 = False
+if hasattr(torch, 'set_float32_matmul_precision'):
+    torch.set_float32_matmul_precision('highest')
+
 import numpy as np
 from datetime import datetime
 from scipy.ndimage import median_filter
@@ -39,6 +46,7 @@ from scripts.sglnet.utils import (
     load_label,
     calibrate_hsi,
     get_spatial_train_val_mask,
+    get_random_train_val_mask,
     save_weights,
     load_weights,
     weights_exist,
@@ -73,7 +81,7 @@ else:
 
 
 def train_model(
-    model, train_loader, val_loader, optimizer, device, dry_run=False, food_type=None
+    model, train_loader, val_loader, optimizer, device, dry_run=False, food_type=None, suffix=''
 ):
     """
     Train SGLNet autoencoder with reconstruction loss.
@@ -130,7 +138,7 @@ def train_model(
             break
 
     if food_type:
-        save_weights(model, food_type)
+        save_weights(model, food_type, suffix=suffix)
 
     return epoch
 
@@ -193,12 +201,13 @@ def inference(model, test_data, device, patch_size=9):
 
 
 def evaluate(scores, labels):
-    """Compute ROC-AUC and PR-AUC."""
+    """Compute ROC-AUC and PR-AUC with full curve data."""
     roc_auc = roc_auc_score(labels, scores)
+    fpr, tpr, _ = roc_curve(labels, scores)
     precision, recall, _ = precision_recall_curve(labels, scores)
     pr_auc = auc(recall, precision)
 
-    return roc_auc, pr_auc
+    return roc_auc, pr_auc, fpr.tolist(), tpr.tolist(), precision.tolist(), recall.tolist()
 
 
 def benchmark_food_type(
@@ -206,6 +215,7 @@ def benchmark_food_type(
     base_dir: str = "AnomalyonFood/Dataset",
     dry_run: bool = False,
     retrain: bool = True,
+    split_method: str = "spatial",
     **kwargs,
 ) -> dict:
     """
@@ -216,13 +226,15 @@ def benchmark_food_type(
         base_dir: Root path to the dataset directory
         dry_run: Run for 1 epoch only (optional)
         retrain: Whether to retrain or load saved model (optional)
+        split_method: "spatial" (guillotine) or "random" (random sampling)
 
     Returns:
         dict with results including roc_auc, pr_auc, etc.
     """
     print(f"\n{'=' * 80}")
-    print(f"SGLNet Benchmark: {food_type}")
+    print(f"SGLNet Benchmark: {food_type} (split_method={split_method})")
     print(f"{'=' * 80}")
+    suffix = '_random' if split_method == 'random' else ''
 
     total_start_time = time.time()
     if torch.cuda.is_available():
@@ -240,7 +252,10 @@ def benchmark_food_type(
 
     H, W, B = train_data.shape
 
-    train_mask, val_mask = get_spatial_train_val_mask(H, W)
+    if split_method == "random":
+        train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
+    else:
+        train_mask, val_mask = get_spatial_train_val_mask(H, W)
 
     test_data_path = os.path.join(base_path, "Test", "data.hdr")
     test_white_path = os.path.join(base_path, "Test", "WHITEREF.hdr")
@@ -304,9 +319,9 @@ def benchmark_food_type(
     weights_loaded = False
     train_time_sec = 0.0
 
-    if not retrain and weights_exist(food_type):
+    if not retrain and weights_exist(food_type, suffix=suffix):
         print(f"\n[LoadWeights] Trained weights found. Loading {food_type} model...")
-        load_weights(model, food_type, device=device)
+        load_weights(model, food_type, device=device, suffix=suffix)
         weights_loaded = True
 
     if not weights_loaded:
@@ -322,6 +337,7 @@ def benchmark_food_type(
             device,
             dry_run=dry_run,
             food_type=food_type,
+            suffix=suffix,
         )
 
         train_time_sec = time.time() - training_start
@@ -330,7 +346,7 @@ def benchmark_food_type(
         model, test_data, device, patch_size=patch_size
     )
 
-    roc_auc, pr_auc = evaluate(scores, binary_labels)
+    roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(scores, binary_labels)
 
     max_vram_gb = 0.0
     if torch.cuda.is_available():
@@ -348,6 +364,13 @@ def benchmark_food_type(
         print(f"Peak VRAM: {max_vram_gb:.2f} GB")
     print(f"{'=' * 80}")
 
+    anomaly_dir = kwargs.get('anomaly_dir')
+    if anomaly_dir:
+        np.save(os.path.join(anomaly_dir, 'sglnet_' + food_type + '_scores.npy'), scores.reshape(shape[0], shape[1]))
+        label_path = os.path.join(anomaly_dir, f'{food_type}_labels.npy')
+        if not os.path.exists(label_path):
+            np.save(label_path, binary_labels.reshape(shape[0], shape[1]).astype(np.uint8))
+
     return {
         "roc_auc": float(roc_auc),
         "pr_auc": float(pr_auc),
@@ -355,6 +378,10 @@ def benchmark_food_type(
         "infer_time_sec": float(infer_time),
         "n_params": int(total_params),
         "max_vram_gb": float(max_vram_gb),
+        "fpr": fpr,
+        "tpr": tpr,
+        "precision": precision,
+        "recall": recall,
     }
 
 

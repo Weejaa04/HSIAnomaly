@@ -93,28 +93,38 @@ def get_spatial_train_val_mask(
     return train_mask, val_mask
 
 
+def get_random_train_val_mask(H, W, seed=42):
+    """Generate random masks for training and validation pixels."""
+    np.random.seed(seed)
+    total_pixels = H * W
+    rand_map = np.random.rand(total_pixels)
+    train_mask = (rand_map < 0.375).reshape(H, W).flatten()
+    val_mask = ((rand_map >= 0.375) & (rand_map < 0.500)).reshape(H, W).flatten()
+    return train_mask, val_mask
+
+
 def get_weight_dir():
     """Get weight directory path for SGLNet."""
     return os.path.join(os.path.dirname(__file__), "..", "..", "weights", "sglnet")
 
 
-def get_weight_paths(food_type):
+def get_weight_paths(food_type, suffix=''):
     """Get weight file path for a given food type."""
     model_dir = get_weight_dir()
     os.makedirs(model_dir, exist_ok=True)
-    return os.path.join(model_dir, f"{food_type}.pt")
+    return os.path.join(model_dir, f"{food_type}{suffix}.pt")
 
 
-def save_weights(model, food_type):
+def save_weights(model, food_type, suffix=''):
     """Save model weights to disk."""
-    weight_path = get_weight_paths(food_type)
+    weight_path = get_weight_paths(food_type, suffix=suffix)
     torch.save(model.state_dict(), weight_path)
     print(f"✅ Weights saved to {weight_path}")
 
 
-def load_weights(model, food_type, device=None):
+def load_weights(model, food_type, device=None, suffix=''):
     """Load trained weights from saved checkpoint."""
-    weight_path = get_weight_paths(food_type)
+    weight_path = get_weight_paths(food_type, suffix=suffix)
 
     if os.path.exists(weight_path):
         if device is None:
@@ -129,6 +139,6 @@ def load_weights(model, food_type, device=None):
         return False
 
 
-def weights_exist(food_type):
+def weights_exist(food_type, suffix=''):
     """Check if weights exist for a given food type."""
-    return os.path.exists(get_weight_paths(food_type))
+    return os.path.exists(get_weight_paths(food_type, suffix=suffix))

@@ -116,9 +116,13 @@ def get_random_train_val_indices(H, W, seed=42):
     return train_indices, val_indices
 
 
-def get_weight_paths(food_type):
+def get_weight_paths(food_type, suffix=''):
     """
     Get weight file path for a given food type.
+    
+    Args:
+        food_type: 'Almond', 'Pistachio', or 'GarlicStems'
+        suffix: optional suffix (e.g., '_random') to distinguish weight files
     
     Returns:
         weight_path: path to the trained model weights (after both Phase 1 and Phase 2)
@@ -128,26 +132,27 @@ def get_weight_paths(food_type):
     )
     os.makedirs(model_dir, exist_ok=True)
     
-    weight_path = os.path.join(model_dir, f'{food_type}.pt')
+    weight_path = os.path.join(model_dir, f'{food_type}{suffix}.pt')
     
     return weight_path
 
 
-def save_weights(model, food_type):
+def save_weights(model, food_type, suffix=''):
     """
     Save model weights to disk.
     
     Args:
         model: PyTorch model
         food_type: 'Almond', 'Pistachio', or 'GarlicStems'
+        suffix: optional suffix (e.g., '_random') to distinguish weight files
     """
-    weight_path = get_weight_paths(food_type)
+    weight_path = get_weight_paths(food_type, suffix=suffix)
     
     torch.save(model.state_dict(), weight_path)
     print(f"✅ Weights saved to {weight_path}")
 
 
-def load_weights(model, food_type, device=None):
+def load_weights(model, food_type, device=None, suffix=''):
     """
     Load trained weights from saved checkpoint.
     
@@ -155,11 +160,12 @@ def load_weights(model, food_type, device=None):
         model: PyTorch model to load weights into
         food_type: 'Almond', 'Pistachio', or 'GarlicStems'
         device: torch device to load weights to (defaults to model.device if available)
+        suffix: optional suffix (e.g., '_random') to distinguish weight files
     
     Returns:
         True if weights were loaded, False if file doesn't exist
     """
-    weight_path = get_weight_paths(food_type)
+    weight_path = get_weight_paths(food_type, suffix=suffix)
     
     if os.path.exists(weight_path):
         # Use provided device or try to get from model
@@ -175,7 +181,7 @@ def load_weights(model, food_type, device=None):
         return False
 
 
-def weights_exist(food_type):
+def weights_exist(food_type, suffix=''):
     """Check if weights exist for a given food type."""
-    weight_path = get_weight_paths(food_type)
+    weight_path = get_weight_paths(food_type, suffix=suffix)
     return os.path.exists(weight_path)

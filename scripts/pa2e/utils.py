@@ -167,7 +167,7 @@ def load_weights(model, food_type, device='cpu', suffix=None):
         return False
 
 
-def weights_exist(food_type):
+def weights_exist(food_type, suffix=None):
     """Check if weights exist for a given food type."""
-    weight_path = get_weight_path(food_type)
+    weight_path = get_weight_path(food_type, suffix=suffix)
     return os.path.exists(weight_path)

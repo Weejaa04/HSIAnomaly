@@ -26,7 +26,7 @@ torch.backends.cudnn.allow_tf32 = False
 if hasattr(torch, 'set_float32_matmul_precision'):
     torch.set_float32_matmul_precision('highest')
 
-from .model import OTADNet, OTADDataset, BlockRestore, hyper_norm
+from .model import OTADNet, OTADDataset, BlockRestore
 from .utils import get_food_data, SEED_DICT, UniversalEarlyStopping
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
@@ -219,7 +219,6 @@ def benchmark_food_type(
     res_map = torch.cat(res_map, dim=0)
     res_map = block_restore(res_map, data_set_test.padding, H, W, valid_indices=data_set_test.valid_indices)
     res_map = res_map[0].sum(0).cpu().numpy()
-    res_map = hyper_norm(res_map)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize(device)

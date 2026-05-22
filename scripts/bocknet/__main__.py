@@ -52,10 +52,6 @@ def set_seed(seed: int):
         torch.backends.cudnn.benchmark = False
 
 
-def map01(img):
-    return (img - img.min()) / (img.max() - img.min() + 1e-8)
-
-
 def get_auc(HSI_old, HSI_new, gt):
     """
     HSI_old: (H, W, B)
@@ -71,9 +67,6 @@ def get_auc(HSI_old, HSI_new, gt):
 
     detectmap = np.linalg.norm(sub_img, ord=2, axis=1, keepdims=True) ** 2
     detectmap = detectmap / n_band
-
-    # normalization
-    detectmap = map01(detectmap)
 
     # get auc and pr
     label = np.reshape(gt, (n_pixels, 1), order="F")

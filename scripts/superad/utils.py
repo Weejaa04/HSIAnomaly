@@ -18,11 +18,6 @@ def set_seed(seed: int):
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 
-def map01(img):
-    img_01 = (img - img.min()) / (img.max() - img.min() + 1e-8)
-    return img_01
-
-
 def get_auc(HSI_old, HSI_new, gt):
     n_row, n_col, n_band = HSI_old.shape
     n_pixels = n_row * n_col
@@ -33,8 +28,6 @@ def get_auc(HSI_old, HSI_new, gt):
 
     detectmap = np.linalg.norm(sub_img, ord=2, axis=1, keepdims=True) ** 2
     detectmap = detectmap / n_band
-
-    detectmap = map01(detectmap)
 
     label = np.reshape(gt, (n_pixels, 1), order="F")
     # Convert to binary labels: 2 is normal (0), everything else is anomaly (1)

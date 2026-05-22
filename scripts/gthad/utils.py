@@ -110,8 +110,6 @@ def get_random_train_val_mask(H, W, seed=42):
 def img2mask(img):
     """Convert residual map to anomaly score map."""
     img = img[0].sum(0)  # Sum over channels and remove batch
-    img = img - img.min()
-    img = img / (img.max() + 1e-8)
     img = img.detach().cpu().numpy()
     return img
 

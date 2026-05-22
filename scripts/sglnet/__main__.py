@@ -235,6 +235,7 @@ def benchmark_food_type(
     print(f"SGLNet Benchmark: {food_type} (split_method={split_method})")
     print(f"{'=' * 80}")
     suffix = '_random' if split_method == 'random' else ''
+    suffix += kwargs.get('noise_suffix', '')
 
     total_start_time = time.time()
     if torch.cuda.is_available():

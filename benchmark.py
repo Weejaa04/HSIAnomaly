@@ -20,6 +20,7 @@ import time
 import traceback
 import re
 import numpy as np
+from scipy.stats import norm
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -46,6 +47,7 @@ ALL_ARCHS = [
     "sglnet",
     "autoad",
     "otad",
+    "dms2f",
     # "cbar",
 ]
 ARCH_MODULE_MAP = {
@@ -57,7 +59,19 @@ ARCH_MODULE_MAP = {
     "sglnet": "scripts.sglnet.__main__",
     "autoad": "scripts.autoad.__main__",
     "otad": "scripts.otad.__main__",
+    "dms2f": "scripts.dms2f.__main__",
     # "cbar": "scripts.cbar.__main__",
+}
+ARCH_DISPLAY_NAME = {
+    "bocknet": "BockNet",
+    "our": "Ours",
+    "pa2e": "PA2E",
+    "gthad": "GT-HAD",
+    "superad": "SuperAD",
+    "sglnet": "SGLNet",
+    "autoad": "Auto-AD",
+    "otad": "OT-AD",
+    "dms2f": "DMS2F-HAD",
 }
 ARCH_RESULT_FILE = {
     "bocknet": "bocknet.json",
@@ -68,6 +82,7 @@ ARCH_RESULT_FILE = {
     "sglnet": "sglnet.json",
     "autoad": "autoad.json",
     "otad": "otad.json",
+    "dms2f": "dms2f.json",
     # "cbar": "cbar.json",
 }
 
@@ -160,7 +175,8 @@ def print_summary(all_results: dict):
     sorted_archs_roc = sorted(archs, key=lambda a: roc_avgs[a], reverse=True)
 
     for arch in sorted_archs_roc:
-        row = f"{arch:<20}"
+        name = ARCH_DISPLAY_NAME.get(arch, arch)
+        row = f"{name:<20}"
         for ft in food_types:
             r = all_results[arch].get(ft)
             if r is None:
@@ -208,7 +224,8 @@ def print_summary(all_results: dict):
     sorted_archs_pr = sorted(archs, key=lambda a: pr_avgs[a], reverse=True)
 
     for arch in sorted_archs_pr:
-        row = f"{arch:<20}"
+        name = ARCH_DISPLAY_NAME.get(arch, arch)
+        row = f"{name:<20}"
         for ft in food_types:
             r = all_results[arch].get(ft)
             if r is None:
@@ -236,6 +253,7 @@ def plot_curves(all_results: dict, output_dir: str):
     """Plot ROC/PR curves, anomaly maps, and box plots per food type."""
     food_types = sorted({ft for results in all_results.values() for ft in results})
     archs = list(all_results.keys())
+    archs = [a for a in archs if a != 'our'] + ([a for a in archs if a == 'our'] if 'our' in archs else [])
     colors = plt.cm.tab10(np.linspace(0, 1, len(archs)))
 
     plot_dir = os.path.join(output_dir, 'plot')
@@ -252,7 +270,8 @@ def plot_curves(all_results: dict, output_dir: str):
             if r is None or "fpr" not in r:
                 continue
             roc_auc = r.get("roc_auc", float("nan"))
-            ax.plot(r["fpr"], r["tpr"], color=color, lw=1.5, label=f"{arch} (AUC={roc_auc:.4f})")
+            name = ARCH_DISPLAY_NAME.get(arch, arch)
+            ax.plot(r["fpr"], r["tpr"], color=color, lw=1.5, label=f"{name} (AUC={roc_auc:.4f})")
         ax.set_xlabel('False Positive Rate')
         ax.set_ylabel('True Positive Rate')
         ax.set_title(f'ROC Curves — {ft}')
@@ -271,7 +290,8 @@ def plot_curves(all_results: dict, output_dir: str):
             if r is None or "precision" not in r:
                 continue
             pr_auc = r.get("pr_auc", float("nan"))
-            ax.plot(r["recall"], r["precision"], color=color, lw=1.5, label=f"{arch} (AP={pr_auc:.4f})")
+            name = ARCH_DISPLAY_NAME.get(arch, arch)
+            ax.plot(r["recall"], r["precision"], color=color, lw=1.5, label=f"{name} (AP={pr_auc:.4f})")
         ax.set_xlabel('Recall')
         ax.set_ylabel('Precision')
         ax.set_title(f'PR Curves — {ft}')
@@ -295,7 +315,8 @@ def plot_curves(all_results: dict, output_dir: str):
             fig, ax = plt.subplots(figsize=(8, 6))
             im = ax.imshow(scores, cmap='hot', aspect='auto')
             plt.colorbar(im, ax=ax, label='Normalized Score [0,1]')
-            ax.set_title(f'{arch} — {ft} Anomaly Map')
+            name = ARCH_DISPLAY_NAME.get(arch, arch)
+            ax.set_title(f'{name} — {ft} Anomaly Map')
             ax.set_xlabel('Width')
             ax.set_ylabel('Height')
             fig.tight_layout()
@@ -317,23 +338,22 @@ def plot_curves(all_results: dict, output_dir: str):
                 score_path = os.path.join(anomaly_dir, f'{arch}_{ft}_scores.npy')
                 if not os.path.exists(score_path):
                     continue
-                scores = np.load(score_path)
-                # Normalize per architecture to [0,1] for comparable box plots
-                smin, smax = scores.min(), scores.max()
-                if smax > smin:
-                    scores = (scores - smin) / (smax - smin)
-                else:
-                    scores = np.zeros_like(scores)
-                scores_flat = scores.flatten()
-                gt_flat = gt.flatten() if gt.shape == scores.shape else gt.flatten()[:len(scores_flat)]
-                mask = gt_flat[:len(scores_flat)]
-                norm = scores_flat[~mask]
-                anom = scores_flat[mask]
-                if len(norm) > 0 and len(anom) > 0:
-                    data_normal.append(norm)
-                    data_anomaly.append(anom)
+                scores = np.load(score_path).flatten()
+                gt_flat = gt.flatten() if gt.shape == scores.shape else gt.flatten()[:len(scores)]
+                mask = gt_flat[:len(scores)]
+                normal_scores = scores[~mask]
+                anomaly_scores = scores[mask]
+                if len(normal_scores) > 0 and len(anomaly_scores) > 0:
+                    μ_n = normal_scores.mean()
+                    σ_n = normal_scores.std()
+                    if σ_n > 1e-8:
+                        scores_norm = norm.cdf(scores, loc=μ_n, scale=σ_n)
+                    else:
+                        scores_norm = np.zeros_like(scores)
+                    data_normal.append(scores_norm[~mask])
+                    data_anomaly.append(scores_norm[mask])
                     positions.append(i)
-                    labels_list.append(arch)
+                    labels_list.append(ARCH_DISPLAY_NAME.get(arch, arch))
             if data_normal:
                 bp1 = ax.boxplot(data_normal, positions=[p - 0.2 for p in positions],
                                  widths=0.3, patch_artist=True,
@@ -417,6 +437,11 @@ Examples:
         metavar="DURATION",
         help="GPU cooldown between architectures (e.g. 30s, 1m, 5m). Default: 0s",
     )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Skip running, load existing JSON results and regenerate plots only",
+    )
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -439,6 +464,33 @@ Examples:
     if not archs:
         print("❌ No architectures selected.")
         sys.exit(1)
+
+    # ── plot-only mode: load existing results and regenerate plots ─────
+    if args.plot:
+        print(f"\n{'=' * 80}")
+        print(f"  Plot-only mode — loading existing results from {args.output_dir}")
+        print(f"{'=' * 80}")
+
+        combined_path = os.path.join(args.output_dir, "benchmark_all.json")
+        if os.path.isfile(combined_path):
+            with open(combined_path) as f:
+                all_results = json.load(f)
+            print(f"  ✅ Loaded {combined_path}")
+        else:
+            all_results = {}
+            for arch in ALL_ARCHS:
+                result_path = os.path.join(args.output_dir, ARCH_RESULT_FILE[arch])
+                if os.path.isfile(result_path):
+                    with open(result_path) as f:
+                        loaded = json.load(f)
+                    stitched = {ft: loaded[ft] for ft in food_types if ft in loaded}
+                    if stitched:
+                        all_results[arch] = stitched
+            print(f"  ✅ Stitched {len(all_results)} architectures from per-arch JSONs")
+
+        print_summary(all_results)
+        plot_curves(all_results, args.output_dir)
+        return
 
     # ── build extra kwargs ───────────────────────────────────────────────
     extra_kwargs = {
@@ -468,8 +520,30 @@ Examples:
         elapsed = time.time() - arch_start
         print(f"\n⏱  [{arch}] total wall time: {elapsed:.1f}s")
 
+        # VRAM clear between architectures
+        if arch != archs[-1]:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+            if args.cooldown > 0:
+                print(f"  Architecture switch: cooling down GPU for {args.cooldown}s...")
+                time.sleep(args.cooldown)
+
     total_elapsed = time.time() - total_start
     print(f"\n⏱  Total wall time: {total_elapsed:.1f}s")
+
+    # ── stitch existing results for architectures not re-run ──────────────
+    for candidate_arch in ALL_ARCHS:
+        if candidate_arch not in all_results:
+            result_path = os.path.join(args.output_dir, ARCH_RESULT_FILE[candidate_arch])
+            if os.path.isfile(result_path):
+                with open(result_path) as f:
+                    loaded = json.load(f)
+                stitched = {ft: loaded[ft] for ft in food_types if ft in loaded}
+                if stitched:
+                    all_results[candidate_arch] = stitched
+                    print(f"  📎 [{candidate_arch}] stitched from {result_path}")
 
     # ── combined JSON ────────────────────────────────────────────────────
     combined_path = os.path.join(args.output_dir, "benchmark_all.json")

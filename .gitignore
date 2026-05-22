@@ -2,3 +2,5 @@ __pycache__
 AnomalyonFood
 weights
 .ruff_cache
+results
+AnomalyonFood.zip

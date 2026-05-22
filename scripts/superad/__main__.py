@@ -100,6 +100,7 @@ def benchmark_food_type(
         dict: Result dictionary with roc_auc, pr_auc, etc.
     """
     suffix = '_random' if split_method == 'random' else ''
+    suffix += kwargs.get('noise_suffix', '')
     print(f"\n{'=' * 70}")
     print(f"SUPERAD BENCHMARK: {food_type} (split_method={split_method})")
     print(f"{'=' * 70}")

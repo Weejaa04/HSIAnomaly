@@ -326,6 +326,7 @@ def benchmark_food_type(food_type, **kwargs):
     retrain = kwargs.get('retrain', True)
     split_method = kwargs.get('split_method', 'spatial')
     suffix = '_random' if split_method == 'random' else ''
+    suffix += kwargs.get('noise_suffix', '')
     print(f"\n{'='*80}")
     print(f"PA2E Benchmark: {food_type} (split_method={split_method})")
     print(f"{'='*80}")

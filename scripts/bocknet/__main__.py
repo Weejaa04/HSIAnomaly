@@ -116,6 +116,7 @@ def benchmark_food_type(
 
     print(f"\n{'=' * 70}\nBENCHMARKING: {food_type} (split_method={split_method})\n{'=' * 70}")
     suffix = '_random' if split_method == 'random' else ''
+    suffix += kwargs.get('noise_suffix', '')
 
     # For dry run, use tight constraints to complete quickly while testing full pipeline
     if dry_run:

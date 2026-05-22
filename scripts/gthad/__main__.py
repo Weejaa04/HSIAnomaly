@@ -94,6 +94,7 @@ def benchmark_food_type(food_type: str,
         dict with keys: roc_auc, pr_auc, detectmap_shape, infer_time_sec, n_params
     """
     suffix = '_random' if split_method == 'random' else ''
+    suffix += kwargs.get('noise_suffix', '')
     print(f"\n{'='*70}\nBENCHMARKING: {food_type} (GT-HAD, split_method={split_method})\n{'='*70}")
     
     # ─────────────────────────────────────────────────────────────────────────

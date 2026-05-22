@@ -46,7 +46,19 @@ MAIN_ARCHS = [
     "sglnet",
     "autoad",
     "otad",
+    "dms2f",
 ]
+ARCH_DISPLAY_NAME = {
+    "bocknet": "BockNet",
+    "our": "Ours",
+    "pa2e": "PA2E",
+    "gthad": "GT-HAD",
+    "superad": "SuperAD",
+    "sglnet": "SGLNet",
+    "autoad": "Auto-AD",
+    "otad": "OT-AD",
+    "dms2f": "DMS2F-HAD",
+}
 ARCH_RESULT_FILE = {
     "bocknet": "bocknet.json",
     "our": "our.json",
@@ -56,6 +68,7 @@ ARCH_RESULT_FILE = {
     "sglnet": "sglnet.json",
     "autoad": "autoad.json",
     "otad": "otad.json",
+    "dms2f": "dms2f.json",
 }
 ARCH_MODULE_MAP = {
     "bocknet": "scripts.bocknet.__main__",
@@ -66,6 +79,7 @@ ARCH_MODULE_MAP = {
     "sglnet": "scripts.sglnet.__main__",
     "autoad": "scripts.autoad.__main__",
     "otad": "scripts.otad.__main__",
+    "dms2f": "scripts.dms2f.__main__",
 }
 
 
@@ -146,6 +160,7 @@ def print_comparison_summary(all_results: dict):
         print("─" * 100)
 
         for arch in sorted(archs):
+            name = ARCH_DISPLAY_NAME.get(arch, arch)
             for split_method in ["spatial", "random"]:
                 key = f"{arch}|{split_method}|{ft}"
                 if key in all_results:
@@ -161,7 +176,7 @@ def print_comparison_summary(all_results: dict):
                     pr_str = f"{pr:.4f}" if not np.isnan(pr) else "N/A"
                     roc_str = f"{roc:.4f}" if not np.isnan(roc) else "N/A"
 
-                    print(f"{arch:<20}  {split_method:<15}  {pr_str:>{col}}  {roc_str:>{col}}")
+                    print(f"{name:<20}  {split_method:<15}  {pr_str:>{col}}  {roc_str:>{col}}")
 
     print()
 
@@ -230,6 +245,11 @@ Examples:
         metavar="DURATION",
         help="GPU cooldown between architectures (e.g. 30s, 1m, 5m). Default: 0s",
     )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Skip running, load existing JSON results and regenerate output only",
+    )
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -252,6 +272,21 @@ Examples:
     if not archs:
         print("❌ No architectures selected.")
         sys.exit(1)
+
+    # ── plot-only mode: load existing results and regenerate output ────
+    if args.plot:
+        print(f"\n{'=' * 100}")
+        print(f"  Plot-only mode — loading existing results from {args.output_dir}")
+        print(f"{'=' * 100}")
+        comparison_path = os.path.join(args.output_dir, "splitting_comparison.json")
+        if os.path.isfile(comparison_path):
+            with open(comparison_path) as f:
+                all_results = json.load(f)
+            print(f"  ✅ Loaded {comparison_path}")
+            print_comparison_summary(all_results)
+        else:
+            print(f"  ❌ No splitting results found at {comparison_path}")
+        return
 
     # ── split methods ───────────────────────────────────────────────────
     split_methods = ["spatial", "random"]
@@ -305,8 +340,42 @@ Examples:
         elapsed = time.time() - arch_start
         print(f"\n⏱  [{arch}] total wall time: {elapsed:.1f}s")
 
+        # VRAM clear between architectures
+        if arch != archs[-1]:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+            if args.cooldown > 0:
+                print(f"  Architecture switch: cooling down GPU for {args.cooldown}s...")
+                time.sleep(args.cooldown)
+
     total_elapsed = time.time() - total_start
     print(f"\n⏱  Total wall time: {total_elapsed:.1f}s")
+
+    # ── stitch existing results for architectures not re-run ──────────────
+    for candidate_arch in MAIN_ARCHS:
+        if candidate_arch in archs:
+            continue
+        bench_path = os.path.join(args.benchmark_dir, ARCH_RESULT_FILE[candidate_arch])
+        if os.path.isfile(bench_path):
+            with open(bench_path) as f:
+                arch_results = json.load(f)
+            for ft in food_types:
+                if ft in arch_results:
+                    key = f"{candidate_arch}|spatial|{ft}"
+                    if key not in all_results:
+                        all_results[key] = arch_results[ft]
+            print(f"  📎 [{candidate_arch}] spatial stitched from {bench_path}")
+        comparison_path = os.path.join(args.output_dir, "splitting_comparison.json")
+        if os.path.isfile(comparison_path):
+            with open(comparison_path) as f:
+                prev_results = json.load(f)
+            for ft in food_types:
+                key = f"{candidate_arch}|random|{ft}"
+                if key in prev_results and key not in all_results:
+                    all_results[key] = prev_results[key]
+            print(f"  📎 [{candidate_arch}] random stitched from {comparison_path}")
 
     # ── combined JSON ────────────────────────────────────────────────────
     os.makedirs(args.output_dir, exist_ok=True)

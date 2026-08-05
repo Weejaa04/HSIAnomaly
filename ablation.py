@@ -8,6 +8,9 @@ Ablation axes:
   3. Loss function    : mse (★) | mae
   4. Scoring method   : nnmb (★) | dsvdd
   5. Partial windows  : partial (★) | non_partial_cnn | non_partial_linear
+  6. Loss weights     : alpha × beta grid {0.2..1.0 step 0.2} + baseline 1.0 × 0.5 (★)
+  7. Post-processing  : median kernel none | 3x3 (★) | 5x5 | 7x7
+  8. Training phases  : phase1 + phase2 (★) | phase2 only (no phase 1)
 
 (★) = baseline/current setting
 
@@ -17,6 +20,11 @@ Usage:
     python ablation.py --dry-run
     python ablation.py --retrain no
     python ablation.py --output-dir ./results/ablation
+    python ablation.py --group weight
+    python ablation.py --group loss
+python ablation.py --group post
+    python ablation.py --group phase
+    python ablation.py --group phase
 """
 
 import argparse
@@ -29,6 +37,8 @@ import numpy as np
 import importlib
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
+
+WEIGHT_GRID = [0.2, 0.4, 0.6, 0.8, 1.0]
 
 # ── Ablation axis groupings (for table printing) ─────────────────────────────
 ABLATION_GROUPS = {
@@ -54,7 +64,45 @@ ABLATION_GROUPS = {
         ("partial_no_cnn",     "Non-Partial (CNN)"),
         ("partial_no_linear",  "Non-Partial (Linear)"),
     ],
+    "6. Loss Weights": [
+        ("weight_baseline", "Baseline: α=1.0 × β=0.5 ★"),
+    ] + [
+        (f"weight_a{a:.1f}_b{b:.1f}", f"α={a:.1f} × β={b:.1f}")
+        for a in WEIGHT_GRID for b in WEIGHT_GRID
+    ],
+    "7. Post-Processing": [
+        ("pp_zero", "No median smoothing"),
+        ("pp_3",    "Median 3x3 ★"),
+        ("pp_5",    "Median 5x5"),
+        ("pp_7",    "Median 7x7"),
+    ],
+    "8. Training Phases": [
+        ("phase_both",  "Phase 1 + Phase 2 ★"),
+        ("phase_no_p1", "No Phase 1 (Phase 2 only)"),
+    ],
 }
+
+# ── Group aliases (short keys accepted by --group) ───────────────────────────
+GROUP_ALIASES = {
+    "calib":   "1. HSI Calibration",
+    "encoder": "2. Encoder Type",
+    "loss":    "3. Loss Function",
+    "scoring": "4. Scoring Method",
+    "partial": "5. Partial Windows",
+    "weight":  "6. Loss Weights",
+    "post":    "7. Post-Processing",
+    "phase":   "8. Training Phases",
+}
+
+
+def resolve_group(name: str) -> str:
+    """Map a --group value (alias or full label) to the canonical group name."""
+    if name in ABLATION_GROUPS:
+        return name
+    if name in GROUP_ALIASES:
+        return GROUP_ALIASES[name]
+    choices = ", ".join([f"{k} ({v})" for k, v in GROUP_ALIASES.items()])
+    raise ValueError(f"Unknown group: {name!r}. Available groups: {choices}")
 
 
 def convert_numpy(obj):
@@ -67,9 +115,12 @@ def convert_numpy(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def run_ablation(food_types: list, output_dir: str, dry_run: bool, retrain: bool) -> dict:
-    """Run full ablation over all food types. Returns nested dict: variant → food → result."""
+def run_ablation(food_types: list, output_dir: str, dry_run: bool, retrain: bool,
+                 variants: list = None) -> dict:
+    """Run full ablation over all food types. Returns nested dict: variant → food → result.
 
+    variants: optional list of variant names; if given, only those variants run.
+    """
     module = importlib.import_module("scripts.ablation.__main__")
     bench_fn = module.benchmark_food_type
 
@@ -79,7 +130,8 @@ def run_ablation(food_types: list, output_dir: str, dry_run: bool, retrain: bool
     for ft in food_types:
         print(f"\n{'#'*80}\n#  FOOD TYPE: {ft}\n{'#'*80}")
         try:
-            food_results[ft] = bench_fn(ft, dry_run=dry_run, retrain=retrain)
+            food_results[ft] = bench_fn(ft, dry_run=dry_run, retrain=retrain,
+                                        variants=variants)
         except Exception as e:
             print(f"\n❌ Error on {ft}: {e}")
             traceback.print_exc()
@@ -140,6 +192,11 @@ Examples:
   python ablation.py --food Almond
   python ablation.py --dry-run
   python ablation.py --retrain no --output-dir ./results/ablation
+  python ablation.py --group loss
+  python ablation.py --group weight
+  python ablation.py --group post
+  python ablation.py --group phase
+  python ablation.py --group "3. Loss Function" --food Almond
         """,
     )
     parser.add_argument("--food", nargs="*", default=None, metavar="FOOD",
@@ -148,6 +205,9 @@ Examples:
                         help="Train for 1 iteration/epoch only")
     parser.add_argument("--retrain", type=str, choices=["yes", "no"], default="yes",
                         help="Retrain models or load saved ones (default: yes)")
+    parser.add_argument("--group", default=None, metavar="GROUP",
+                        help=f"Run only one ablation axis group. Aliases: {', '.join(GROUP_ALIASES)} "
+                             f"or full labels: {', '.join(ABLATION_GROUPS)}")
     parser.add_argument("--output-dir", default="./results",
                         help="Directory for JSON results (default: ./results)")
     args = parser.parse_args()
@@ -164,16 +224,31 @@ Examples:
     retrain = args.retrain == "yes"
     dry_run_str = " [DRY RUN]" if args.dry_run else ""
 
-    print(f"\n{'='*80}")
-    print(f"  HSI Food Anomaly — Ablation Study{dry_run_str}")
-    print(f"  Food types : {', '.join(food_types)}")
-    print(f"  Retrain    : {args.retrain}")
-    print(f"  Output dir : {args.output_dir}")
-    print(f"{'='*80}")
+    # Resolve ablation group (if any) → variant subset
+    variants = None
+    group_name = None
+    if args.group:
+        group_name = resolve_group(args.group)
+        variants = [v for v, _ in ABLATION_GROUPS[group_name]]
+        print(f"\n{'='*80}")
+        print(f"  HSI Food Anomaly — Ablation Study{dry_run_str}")
+        print(f"  Group      : {group_name}  ({len(variants)} variants)")
+        print(f"  Food types : {', '.join(food_types)}")
+        print(f"  Retrain    : {args.retrain}")
+        print(f"  Output dir : {args.output_dir}")
+        print(f"{'='*80}")
+    else:
+        print(f"\n{'='*80}")
+        print(f"  HSI Food Anomaly — Ablation Study{dry_run_str}")
+        print(f"  Food types : {', '.join(food_types)}")
+        print(f"  Retrain    : {args.retrain}")
+        print(f"  Output dir : {args.output_dir}")
+        print(f"{'='*80}")
 
     total_start = time.time()
 
-    by_variant = run_ablation(food_types, args.output_dir, args.dry_run, retrain)
+    by_variant = run_ablation(food_types, args.output_dir, args.dry_run, retrain,
+                              variants=variants)
 
     # ── Save JSON ──────────────────────────────────────────────────────────────
     os.makedirs(args.output_dir, exist_ok=True)
@@ -190,8 +265,9 @@ Examples:
     print(f"{'ABLATION SUMMARY':^80}")
     print(f"{'='*80}")
 
-    for group_name, entries in ABLATION_GROUPS.items():
-        print_group_table(group_name, entries, food_types, by_variant)
+    groups_to_print = [(group_name, ABLATION_GROUPS[group_name])] if group_name else list(ABLATION_GROUPS.items())
+    for g_name, entries in groups_to_print:
+        print_group_table(g_name, entries, food_types, by_variant)
 
     print()
 

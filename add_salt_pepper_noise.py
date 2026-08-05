@@ -7,13 +7,17 @@ from pathlib import Path
 
 DATASET = "AnomalyonFood/Dataset"
 NOISE_LEVELS = [5, 10, 20]
+SEED = 42
 
 
-def generate(food_types=None, levels=None):
+def generate(food_types=None, levels=None, seed=None):
     if food_types is None:
         food_types = ["Almond", "Pistachio", "GarlicStems"]
     if levels is None:
         levels = NOISE_LEVELS
+    if seed is None:
+        seed = SEED
+    np.random.seed(seed)
 
     for ft in food_types:
         for split in ["Train", "Test"]:
@@ -22,7 +26,8 @@ def generate(food_types=None, levels=None):
                 out_hdr = Path(DATASET) / ft / split / f"data_{pct}.hdr"
                 out_raw = Path(DATASET) / ft / split / f"data_{pct}"
 
-                if out_hdr.exists() and out_raw.exists():
+                mask_npy = out_hdr.with_suffix('.noise_mask.npy')
+                if out_hdr.exists() and out_raw.exists() and mask_npy.exists():
                     print(f"  ✅ {ft}/{split} (data_{pct}.hdr): already exists")
                     continue
 
@@ -36,17 +41,22 @@ def generate(food_types=None, levels=None):
                 num_salt = num_noisy // 2
 
                 noisy = data.copy()
+                coords = np.random.choice(total, num_noisy, replace=False)
                 for b in range(bands):
                     flat = noisy[:, :, b].ravel()
-                    coords = np.random.choice(total, num_noisy, replace=False)
                     flat[coords[:num_salt]] = 1.0
                     flat[coords[num_salt:]] = 0.0
                     noisy[:, :, b] = flat.reshape(h, w)
+                noise_mask = np.zeros(h * w, dtype=bool)
+                noise_mask[coords] = True
+                aggregate_mask = noise_mask.reshape(h, w)
 
                 envi.save_image(str(out_hdr), noisy, dtype=np.float32,
                                 metadata=img.metadata, ext="", force=True)
+                mask_npy = out_hdr.with_suffix('.noise_mask.npy')
+                np.save(str(mask_npy), aggregate_mask.astype(np.uint8))
                 print(f"  ✅ {ft}/{split} (data_{pct}.hdr): saved")
 
 
 if __name__ == "__main__":
-    generate()
+    generate(seed=SEED)

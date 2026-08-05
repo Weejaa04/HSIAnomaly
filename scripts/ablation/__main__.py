@@ -1,7 +1,7 @@
 """
 Ablation benchmark for the 'our' architecture.
 
-Runs all five ablation axes and returns results per variant per food type.
+Runs all eight ablation axes and returns results per variant per food type.
 
 Usage:
     from scripts.ablation.__main__ import benchmark_food_type
@@ -91,10 +91,63 @@ ABLATION_AXES = {
     "partial_no_linear":     {"calib": "mean_per_column", "partial": False, "encoder": "linear", "loss": "mse", "scoring": "nnmb"},
 }
 
+# ── 6. Loss Weights (alpha × beta) ─────────────────────────────────────────────
+# Phase 2 loss = alpha * center_loss + beta * recon_loss.
+# Baseline default is alpha=1.0, beta=0.5, i.e. loss = center_loss + 0.5 * recon_loss.
+
+WEIGHT_GRID = [0.2, 0.4, 0.6, 0.8, 1.0]
+
+def _build_weight_variants():
+    variants = {
+        "weight_baseline": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                            "loss": "mse", "scoring": "nnmb", "alpha": 1.0, "beta": 0.5},  # BASELINE
+    }
+    for alpha in WEIGHT_GRID:
+        for beta in WEIGHT_GRID:
+            variants[f"weight_a{alpha:.1f}_b{beta:.1f}"] = {
+                "calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb",
+                "alpha": alpha, "beta": beta,
+            }
+    return variants
+
+ABLATION_AXES.update(_build_weight_variants())
+
+# ── 7. Post-processing (Median kernel) ────────────────────────────────────────
+# Median filter applied to the raw score map before evaluation.
+# Baseline default is 3x3 (median_filter(size=3)); kernel=0 disables smoothing.
+
+PP_AXES = {
+    "pp_zero": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb", "median_kernel": 0},
+    "pp_3":    {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb", "median_kernel": 3},  # BASELINE
+    "pp_5":    {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb", "median_kernel": 5},
+    "pp_7":    {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb", "median_kernel": 7},
+}
+ABLATION_AXES.update(PP_AXES)
+
+# ── 8. Training Phases (Phase 1 pre-training) ─────────────────────────────────
+# Baseline default trains Phase 1 (reconstruction + OneCycleLR) then Phase 2
+# (DSVDD-style). The ablation removes Phase 1 entirely (Phase 2 only, from
+# random init).
+
+PHASE_AXES = {
+    "phase_both":  {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                    "loss": "mse", "scoring": "nnmb", "phase1": True},   # BASELINE
+    "phase_no_p1": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                    "loss": "mse", "scoring": "nnmb", "phase1": False},
+}
+ABLATION_AXES.update(PHASE_AXES)
+
 # Deduplicated set of actually distinct configs (avoids re-training the baseline 5 times)
 # Key = canonical config tuple; value = list of variant names sharing that config
 def _config_key(cfg):
-    return (cfg["calib"], cfg["partial"], cfg["encoder"], cfg["loss"], cfg["scoring"])
+    return (cfg["calib"], cfg["partial"], cfg["encoder"], cfg["loss"], cfg["scoring"],
+            cfg.get("alpha", 1.0), cfg.get("beta", 0.5), cfg.get("median_kernel", 3),
+            cfg.get("phase1", True))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +226,7 @@ def initialize_center(model, train_loader):
     return center
 
 
-def train_phase2(model, train_loader, val_loader, num_epochs, lr, alpha, loss_type, food_type, variant_name, dry_run):
+def train_phase2(model, train_loader, val_loader, num_epochs, lr, alpha, beta, loss_type, food_type, variant_name, dry_run):
     print('\n=== Phase 2: Main Training (DSVDD-style + Early Stopping) ===')
     initialize_center(model, train_loader)
 
@@ -195,7 +248,7 @@ def train_phase2(model, train_loader, val_loader, num_epochs, lr, alpha, loss_ty
             z, recon, target = _get_windows_or_full(model, x)
             r_loss = recon_loss_fn(recon, target, loss_type)
             c_loss = torch.mean(torch.sum((z - model.center) ** 2, dim=1))
-            loss = c_loss + alpha * r_loss
+            loss = alpha * c_loss + beta * r_loss
 
             loss.backward()
             optimizer.step()
@@ -254,7 +307,7 @@ def build_memory_bank(model, loader):
     return torch.cat(bank, dim=0)
 
 
-def inference_nnmb(model, test_loader, memory_bank, H, W):
+def inference_nnmb(model, test_loader, memory_bank, H, W, kernel=3):
     """Nearest-Neighbour Memory Bank scoring (k-NN, k=1)."""
     print("\n--- NNMB Inference ---")
     start = datetime.now()
@@ -271,13 +324,16 @@ def inference_nnmb(model, test_loader, memory_bank, H, W):
 
     scores = torch.cat(all_scores).numpy()
     score_map = scores.reshape(H, W)
-    smoothed = median_filter(score_map, size=3).flatten()
+    if kernel and kernel > 1:
+        smoothed = median_filter(score_map, size=kernel).flatten()
+    else:
+        smoothed = score_map.flatten()
     elapsed = (datetime.now() - start).total_seconds()
-    print(f"⚡ NNMB inference: {elapsed:.2f}s")
+    print(f"⚡ NNMB inference: {elapsed:.2f}s (median kernel={kernel})")
     return smoothed, elapsed
 
 
-def inference_dsvdd(model, test_loader, H, W):
+def inference_dsvdd(model, test_loader, H, W, kernel=3):
     """DSVDD scoring: distance to center in latent space."""
     print("\n--- DSVDD Inference ---")
     start = datetime.now()
@@ -295,7 +351,7 @@ def inference_dsvdd(model, test_loader, H, W):
     score_map = scores.reshape(H, W)
     smoothed = median_filter(score_map, size=3).flatten()
     elapsed = (datetime.now() - start).total_seconds()
-    print(f"⚡ DSVDD inference: {elapsed:.2f}s")
+    print(f"⚡ DSVDD inference: {elapsed:.2f}s (median kernel={kernel})")
     return smoothed, elapsed
 
 
@@ -392,7 +448,10 @@ def run_variant(variant_name, cfg, food_type, base_path, dry_run, retrain):
         num_epochs_p1 = 1 if dry_run else 20
         num_epochs_p2 = 1 if dry_run else 500
 
-        train_phase1(model, train_loader, num_epochs=num_epochs_p1, lr=1e-3, loss_type=cfg["loss"])
+        if cfg.get("phase1", True):
+            train_phase1(model, train_loader, num_epochs=num_epochs_p1, lr=1e-3, loss_type=cfg["loss"])
+        else:
+            print('\n=== Skipping Phase 1 (no pre-training) ===')
 
         if isinstance(model, PA2EPartial):
             model_ft = PA2EPartialFT(model).to(device)
@@ -403,7 +462,8 @@ def run_variant(variant_name, cfg, food_type, base_path, dry_run, retrain):
             model_ft, train_loader, val_loader,
             num_epochs=num_epochs_p2,
             lr=1e-3,
-            alpha=0.5,
+            alpha=cfg.get("alpha", 1.0),
+            beta=cfg.get("beta", 0.5),
             loss_type=cfg["loss"],
             food_type=food_type,
             variant_name=variant_name,
@@ -412,12 +472,13 @@ def run_variant(variant_name, cfg, food_type, base_path, dry_run, retrain):
         train_time_sec = time.time() - training_start
 
     # ── Inference ──────────────────────────────────────────────────────────────
+    kernel = cfg.get("median_kernel", 3)
     if cfg["scoring"] == "nnmb":
         memory_bank = build_memory_bank(model_ft, train_loader)
         print(f"Memory Bank Shape: {memory_bank.shape}")
-        smoothed_scores, infer_time = inference_nnmb(model_ft, test_loader, memory_bank, test_h, test_w)
+        smoothed_scores, infer_time = inference_nnmb(model_ft, test_loader, memory_bank, test_h, test_w, kernel=kernel)
     elif cfg["scoring"] == "dsvdd":
-        smoothed_scores, infer_time = inference_dsvdd(model_ft, test_loader, test_h, test_w)
+        smoothed_scores, infer_time = inference_dsvdd(model_ft, test_loader, test_h, test_w, kernel=kernel)
     else:
         raise ValueError(f"Unknown scoring: {cfg['scoring']!r}")
 
@@ -458,12 +519,15 @@ def benchmark_food_type(food_type, **kwargs):
         food_type: 'Almond', 'Pistachio', or 'GarlicStems'
         dry_run: bool (default False)
         retrain: bool (default True)
+        variants: optional list of variant names; restricts the run to those
+                  variants only (e.g. ['loss_mse', 'loss_mae'])
 
     Returns:
         dict mapping variant_name → result_dict
     """
     dry_run = kwargs.get('dry_run', False)
     retrain = kwargs.get('retrain', True)
+    variants = kwargs.get('variants', None)
 
     print(f"\n{'='*80}")
     print(f"  Ablation Benchmark: {food_type}")
@@ -479,6 +543,9 @@ def benchmark_food_type(food_type, **kwargs):
     all_results: dict = {}
 
     for variant_name, cfg in ABLATION_AXES.items():
+        if variants is not None and variant_name not in variants:
+            continue
+
         key = _config_key(cfg)
         if key in seen_configs:
             all_results[variant_name] = seen_configs[key]

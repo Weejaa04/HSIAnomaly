@@ -20,7 +20,6 @@ import time
 import traceback
 import re
 import numpy as np
-from scipy.stats import norm
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -309,12 +308,9 @@ def plot_curves(all_results: dict, output_dir: str):
             if not os.path.exists(score_path):
                 continue
             scores = np.load(score_path)
-            smin, smax = scores.min(), scores.max()
-            if smax > smin:
-                scores = (scores - smin) / (smax - smin)
             fig, ax = plt.subplots(figsize=(8, 6))
             im = ax.imshow(scores, cmap='hot', aspect='auto')
-            plt.colorbar(im, ax=ax, label='Normalized Score [0,1]')
+            plt.colorbar(im, ax=ax, label='Anomaly Score')
             name = ARCH_DISPLAY_NAME.get(arch, arch)
             ax.set_title(f'{name} — {ft} Anomaly Map')
             ax.set_xlabel('Width')
@@ -344,10 +340,9 @@ def plot_curves(all_results: dict, output_dir: str):
                 normal_scores = scores[~mask]
                 anomaly_scores = scores[mask]
                 if len(normal_scores) > 0 and len(anomaly_scores) > 0:
-                    μ_n = normal_scores.mean()
-                    σ_n = normal_scores.std()
-                    if σ_n > 1e-8:
-                        scores_norm = norm.cdf(scores, loc=μ_n, scale=σ_n)
+                    s_min, s_max = scores.min(), scores.max()
+                    if s_max > s_min:
+                        scores_norm = (scores - s_min) / (s_max - s_min)
                     else:
                         scores_norm = np.zeros_like(scores)
                     data_normal.append(scores_norm[~mask])
@@ -356,19 +351,20 @@ def plot_curves(all_results: dict, output_dir: str):
                     labels_list.append(ARCH_DISPLAY_NAME.get(arch, arch))
             if data_normal:
                 bp1 = ax.boxplot(data_normal, positions=[p - 0.2 for p in positions],
-                                 widths=0.3, patch_artist=True,
+                                 widths=0.3, patch_artist=True, showfliers=False,
                                  boxprops=dict(facecolor='steelblue', alpha=0.7),
                                  medianprops=dict(color='white'))
                 bp2 = ax.boxplot(data_anomaly, positions=[p + 0.2 for p in positions],
-                                 widths=0.3, patch_artist=True,
+                                 widths=0.3, patch_artist=True, showfliers=False,
                                  boxprops=dict(facecolor='crimson', alpha=0.7),
                                  medianprops=dict(color='white'))
                 ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['Normal', 'Anomaly'], loc='upper right')
                 ax.set_xticks(positions)
                 ax.set_xticklabels(labels_list, fontsize=8)
                 ax.set_xlabel('Architecture')
-                ax.set_ylabel('Anomaly Score')
+                ax.set_ylabel('Anomaly Score (min-max scaled)')
                 ax.set_title(f'Score Distribution — {ft}')
+                ax.set_ylim(-0.02, 0.4)
                 ax.grid(True, alpha=0.3, axis='y')
                 fig.tight_layout()
                 box_path = os.path.join(plot_dir, f'boxplot_{ft}.png')

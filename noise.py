@@ -86,10 +86,16 @@ ARCH_MODULE_MAP = {
 DATASET_DIR = "AnomalyonFood/Dataset"
 
 
-def generate_noise_data(food_types, noise_percentages=None):
+NOISE_SEED = 42
+
+
+def generate_noise_data(food_types, noise_percentages=None, seed=None):
     """Generate data_{pct}.hdr + data_{pct} for each noise percentage if missing."""
     if noise_percentages is None:
         noise_percentages = NOISE_ORDER
+    if seed is None:
+        seed = NOISE_SEED
+    np.random.seed(seed)
     import spectral.io.envi as envi
 
     for ft in food_types:
@@ -99,7 +105,9 @@ def generate_noise_data(food_types, noise_percentages=None):
                 noisy_hdr = os.path.join(DATASET_DIR, ft, split, f"data_{pct}.hdr")
                 noisy_dat = os.path.join(DATASET_DIR, ft, split, f"data_{pct}")
 
-                if os.path.exists(noisy_hdr) and os.path.exists(noisy_dat):
+                mask_path = os.path.join(DATASET_DIR, ft, split, f"data_{pct}.noise_mask.npy")
+
+                if os.path.exists(noisy_hdr) and os.path.exists(noisy_dat) and os.path.exists(mask_path):
                     print(f"  ✅ {ft}/{split} data_{pct}.hdr: already exists")
                     continue
 
@@ -113,15 +121,19 @@ def generate_noise_data(food_types, noise_percentages=None):
                 num_salt = num_noisy // 2
 
                 noisy = data.copy()
+                coords = np.random.choice(total, num_noisy, replace=False)
                 for b in range(bands):
                     flat = noisy[:, :, b].ravel()
-                    coords = np.random.choice(total, num_noisy, replace=False)
                     flat[coords[:num_salt]] = 1.0
                     flat[coords[num_salt:]] = 0.0
                     noisy[:, :, b] = flat.reshape(h, w)
+                noise_mask = np.zeros(h * w, dtype=bool)
+                noise_mask[coords] = True
+                aggregate_mask = noise_mask.reshape(h, w)
 
                 envi.save_image(noisy_hdr, noisy, dtype=np.float32,
                                 metadata=img.metadata, ext="", force=True)
+                np.save(mask_path, aggregate_mask.astype(np.uint8))
                 print(f"  ✅ {ft}/{split} data_{pct}.hdr: saved")
 
 
@@ -262,6 +274,67 @@ def print_comparison_summary(all_results):
     print()
 
 
+def plot_noise_1x3(arch, food_type, noise_pct, output_dir, anomaly_dir):
+    """Generate 1x3 combo + individual plots: GT, Noise Mask, Predicted Label."""
+    import matplotlib.pyplot as plt
+
+    base_path = os.path.join(DATASET_DIR, food_type, 'Test')
+
+    gt_path = os.path.join(base_path, 'label.npy')
+    if not os.path.exists(gt_path):
+        print(f"  ⚠️  1x3: GT not found at {gt_path}")
+        return
+    gt = np.load(gt_path)
+    gt_binary = (gt != 2).astype(int)
+
+    mask_path = os.path.join(base_path, f'data_{noise_pct}.noise_mask.npy')
+    if not os.path.exists(mask_path):
+        print(f"  ⚠️  1x3: noise mask not found at {mask_path}")
+        return
+    noise_mask = np.load(mask_path)
+
+    predicted_path = os.path.join(anomaly_dir, f'{arch}_{food_type}_scores.npy')
+    if not os.path.exists(predicted_path):
+        print(f"  ⚠️  1x3: scores not found at {predicted_path}")
+        return
+    predicted = np.load(predicted_path)
+
+    out_dir = os.path.join(output_dir, str(noise_pct))
+    os.makedirs(out_dir, exist_ok=True)
+    arch_name = ARCH_DISPLAY_NAME.get(arch, arch)
+
+    # Individual plots
+    for name, arr, cmap in [('gt', gt_binary, 'hot'), ('noise_mask', noise_mask, 'gray'), ('predicted', predicted, 'hot')]:
+        fig, ax = plt.subplots(figsize=(6, 5))
+        ax.imshow(arr, cmap=cmap, aspect='auto')
+        ax.axis('off')
+        save_path = os.path.join(out_dir, f'{name}_{arch}_{food_type}_{noise_pct}.png')
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+    # 1x3 combo
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    axes[0].imshow(gt_binary, cmap='hot', aspect='auto')
+    axes[0].set_title('Ground Truth')
+    axes[0].axis('off')
+
+    axes[1].imshow(noise_mask, cmap='gray', aspect='auto')
+    axes[1].set_title(f'Noise Mask ({noise_pct}%)')
+    axes[1].axis('off')
+
+    axes[2].imshow(predicted, cmap='hot', aspect='auto')
+    axes[2].set_title(f'Predicted ({arch_name})')
+    axes[2].axis('off')
+
+    save_path = os.path.join(out_dir, f'noise_1x3_{arch}_{food_type}_{noise_pct}.png')
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  🖼️  plots saved: {out_dir}/")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Compare model performance: clean vs 5%, 10%, 20% salt & pepper noise.",
@@ -296,6 +369,14 @@ Examples:
         help="Skip these architectures",
     )
     parser.add_argument(
+        "--level",
+        nargs="*",
+        type=int,
+        default=None,
+        metavar="PCT",
+        help=f"Noise levels to run: {NOISE_ORDER} (default: all)",
+    )
+    parser.add_argument(
         "--dry-run",
         "-dr",
         action="store_true",
@@ -328,7 +409,7 @@ Examples:
     parser.add_argument(
         "--plot",
         action="store_true",
-        help="Skip running, load existing JSON results and regenerate output only",
+        help="Inference only with saved weights (no training). Generates scores and plots.",
     )
     args = parser.parse_args()
 
@@ -350,20 +431,22 @@ Examples:
         print("❌ No architectures selected.")
         sys.exit(1)
 
-    # ── plot-only mode: load existing results and regenerate output ────
+    # Filter noise levels
+    if args.level:
+        for lvl in args.level:
+            if lvl not in NOISE_ORDER:
+                print(f"❌ Unknown noise level: {lvl}. Available: {NOISE_ORDER}")
+                sys.exit(1)
+        noise_order = [l for l in NOISE_ORDER if l in args.level]
+    else:
+        noise_order = list(NOISE_ORDER)
+
+    # ── plot mode: inference only, no training ────────────────────────
     if args.plot:
         print(f"\n{'=' * 100}")
-        print(f"  Plot-only mode — loading existing results from {args.output_dir}")
+        print(f"  Plot mode — inference only with saved weights")
         print(f"{'=' * 100}")
-        all_path = os.path.join(args.output_dir, "all.json")
-        if os.path.isfile(all_path):
-            with open(all_path) as f:
-                all_results = json.load(f)
-            print(f"  ✅ Loaded {all_path}")
-            print_comparison_summary(all_results)
-        else:
-            print(f"  ❌ No noise results found at {all_path}")
-        return
+        args.retrain = "no"
 
     extra_kwargs = {
         "common": {
@@ -378,7 +461,7 @@ Examples:
     print(f"  HSI Food Anomaly - Noise Robustness Test (5%, 10%, 20% Salt & Pepper){dry_run_str}")
     print(f"  Architectures : {', '.join(archs)}")
     print(f"  Food types    : {', '.join(food_types)}")
-    print(f"  Noise order   : {', '.join(f'{pct}%' for pct in NOISE_ORDER)} (highest first)")
+    print(f"  Noise order   : {', '.join(f'{pct}%' for pct in noise_order)} (highest first)")
     print(f"  Retrain       : {args.retrain}")
     print(f"  Output dir    : {args.output_dir}")
     print(f"  Benchmark dir : {args.benchmark_dir} (reused for clean results)")
@@ -416,9 +499,13 @@ Examples:
                 all_results[f"{arch}|clean|{ft}"] = None
 
     # Run noise tests: highest noise first (20% → 10% → 5%)
-    for noise_pct in NOISE_ORDER:
+    for noise_pct in noise_order:
         pct_dir = os.path.join(args.output_dir, str(noise_pct))
         os.makedirs(pct_dir, exist_ok=True)
+
+        anomaly_dir = os.path.join(pct_dir, 'anomaly_maps')
+        os.makedirs(anomaly_dir, exist_ok=True)
+        extra_kwargs["common"]["anomaly_dir"] = anomaly_dir
 
         print(f"\n{'#' * 100}")
         print(f"# NOISE LEVEL: {noise_pct}% Salt & Pepper{' ' * 50}")
@@ -434,6 +521,10 @@ Examples:
             with swap_to_noisy(food_types, noise_pct):
                 noisy_results = run_arch_noise(arch, food_types, args.output_dir, extra_kwargs, args.cooldown)
             print(f"  ✅ [{arch}] restored clean data")
+
+            # Generate 1x3 visualization: GT, Noise Mask, Predicted Label
+            for ft in food_types:
+                plot_noise_1x3(arch, ft, noise_pct, args.output_dir, anomaly_dir)
 
             for ft, result in noisy_results.items():
                 all_results[f"{arch}|noisy_{noise_pct}|{ft}"] = result
@@ -481,7 +572,7 @@ Examples:
             with open(all_path) as f:
                 prev_results = json.load(f)
             stitched = False
-            for noise_pct in NOISE_ORDER:
+            for noise_pct in noise_order:
                 for ft in food_types:
                     key = f"{candidate_arch}|noisy_{noise_pct}|{ft}"
                     if key in prev_results and key not in all_results:

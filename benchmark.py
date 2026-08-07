@@ -86,7 +86,71 @@ ARCH_RESULT_FILE = {
 }
 
 
-def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict, cooldown: int = 0) -> dict:
+def aggregate_runs(runs: list) -> dict:
+    """Aggregate per-seed result dicts into mean ± std for each metric.
+
+    Scalar metrics (roc_auc, pr_auc, ...) are stored as mean with a
+    parallel ``<key>_std`` entry. Curve metrics (fpr/tpr/precision/recall)
+    are interpolated onto a shared grid and stored as mean curves with
+    ``<key>_std`` entries.
+    """
+    import numpy as np
+
+    SCALAR_KEYS = [
+        "roc_auc", "pr_auc", "f1_tnr95", "acc_tnr95",
+        "infer_time_sec", "max_vram_gb", "n_params", "gflops",
+        "train_time_sec", "converged_epoch",
+    ]
+    agg = {}
+
+    for k in SCALAR_KEYS:
+        vals = [r.get(k) for r in runs if r.get(k) is not None]
+        if not vals:
+            continue
+        vals = [float(v) for v in vals]
+        agg[k] = float(np.mean(vals))
+        agg[f"{k}_std"] = float(np.std(vals)) if len(vals) > 1 else 0.0
+
+    # Curves: interpolate onto shared grid then average
+    grid = np.linspace(0.0, 1.0, 200)
+    for x_key, y_key in [("fpr", "tpr"), ("recall", "precision")]:
+        ys = []
+        for r in runs:
+            x = r.get(x_key)
+            y = r.get(y_key)
+            if x is None or y is None:
+                continue
+            x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+            order = np.argsort(x)
+            x, y = x[order], y[order]
+            if len(x) < 2:
+                continue
+            ys.append(np.interp(grid, x, y))
+        if not ys:
+            continue
+        ys = np.stack(ys)
+        agg[x_key] = grid.tolist()
+        agg[y_key] = np.mean(ys, axis=0).tolist()
+        agg[f"{y_key}_std"] = np.std(ys, axis=0).tolist()
+
+    agg["n_seeds"] = len(runs)
+    first = runs[0]
+    if "detectmap_shape" in first:
+        agg["detectmap_shape"] = first["detectmap_shape"]
+    return agg
+
+
+def fmt_mean_std(mean, std, nd=4):
+    """Format 'mean ± std' for a summary cell."""
+    import numpy as np
+
+    if mean is None or (isinstance(mean, float) and np.isnan(mean)):
+        return "nan"
+    return f"{mean:.{nd}f} ± {std:.{nd}f}"
+
+
+def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict,
+             cooldown: int = 0, n_seeds: int = 1) -> dict:
     """Import and call benchmark_food_type for each food type in an architecture."""
     print(f"\n{'#' * 80}")
     print(f"# ARCHITECTURE: {arch}")
@@ -99,11 +163,18 @@ def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict, c
     anomaly_dir = os.path.join(output_dir, 'anomaly-map')
     os.makedirs(anomaly_dir, exist_ok=True)
     for fi, ft in enumerate(food_types):
+        per_seed = []
         try:
-            # Merge architecture-specific kwargs with common kwargs
-            kwargs = {**extra_kwargs.get("common", {}), **extra_kwargs.get(arch, {}), "anomaly_dir": anomaly_dir}
-            result = bench_fn(ft, **kwargs)
-            arch_results[ft] = result
+            for s in range(n_seeds):
+                # Merge architecture-specific kwargs with common kwargs
+                kwargs = {**extra_kwargs.get("common", {}),
+                          **extra_kwargs.get(arch, {}),
+                          "anomaly_dir": anomaly_dir,
+                          "seed": s}
+                result = bench_fn(ft, **kwargs)
+                per_seed.append(result)
+                print(f"  [{arch}] {ft} — seed {s} done")
+            arch_results[ft] = aggregate_runs(per_seed)
         except Exception as e:
             print(f"\n❌ [{arch}] Error on {ft}: {e}")
             traceback.print_exc()
@@ -138,112 +209,101 @@ def run_arch(arch: str, food_types: list, output_dir: str, extra_kwargs: dict, c
     return arch_results
 
 
+def _get_metric(r, key, subkey=None):
+    """Fetch mean and std for a metric, handling nested 'original_model' dicts."""
+    if r is None:
+        return None, None
+    src = r.get("original_model") if ("original_model" in r and subkey is None) or subkey == "original_model" else r
+    if not isinstance(src, dict):
+        return None, None
+    mean = src.get(key)
+    if mean is None:
+        return None, None
+    return float(mean), float(src.get(f"{key}_std", 0.0))
+
+
+def _metric_table(title, all_results, food_types, key, nd=4, nested=False, sort=True, arrow=""):
+    """Print a table of mean ± std per food type for a scalar metric."""
+    archs = list(all_results.keys())
+    col = 22
+    header = f"{'Architecture':<20}"
+    for ft in food_types:
+        header += f"  {ft:>{col}}"
+    header += f"  {'Average':>{col}}"
+    print(f"\n{arrow} {title}:")
+    print(header)
+    print("─" * len(header))
+
+    avgs = {}
+    for arch in archs:
+        means = []
+        for ft in food_types:
+            m, _ = _get_metric(r=all_results[arch].get(ft), key=key, subkey=("original_model" if nested else None))
+            if m is not None and not np.isnan(m):
+                means.append(m)
+        avgs[arch] = np.mean(means) if means else float("nan")
+
+    ordered = sorted(avgs, key=lambda a: avgs[a], reverse=True) if sort else archs
+    for arch in ordered:
+        name = ARCH_DISPLAY_NAME.get(arch, arch)
+        row = f"{name:<20}"
+        for ft in food_types:
+            m, s = _get_metric(all_results[arch].get(ft), key, subkey=("original_model" if nested else None))
+            val = fmt_mean_std(m, s, nd) if m is not None else "N/A"
+            row += f"  {val:>{col}}"
+        avg_str = f"{avgs[arch]:>.4f}" if not np.isnan(avgs[arch]) else "nan"
+        row += f"  {avg_str:>{col}}"
+        print(row)
+    return avgs
+
+
+def _res_cell(all_results, arch, key, div=1.0, nd=2):
+    """Aggregate a resource metric's mean ± std across foods."""
+    means, stds = [], []
+    for r in all_results[arch].values():
+        if not r or r.get(key) is None:
+            continue
+        means.append(float(r[key]) / div)
+        stds.append(float(r.get(f"{key}_std", 0.0)) / div)
+    if not means:
+        return "nan"
+    return f"{np.mean(means):>{nd + 4}.{nd}f} ± {np.mean(stds):.{nd}f}"
+
+
+def _n_seeds(all_results):
+    for results in all_results.values():
+        for r in results.values():
+            if r and r.get("n_seeds") is not None:
+                return int(r["n_seeds"])
+    return 1
+
+
 def print_summary(all_results: dict):
-    """Print a combined cross-architecture summary table."""
+    """Print a combined cross-architecture summary table (mean ± std)."""
     food_types = sorted({ft for results in all_results.values() for ft in results})
     archs = list(all_results.keys())
 
-    col = 16
-
     print(f"\n{'=' * 80}\n{'FINAL CROSS-ARCHITECTURE SUMMARY':^80}\n{'=' * 80}")
+    print("Cells are mean ± std; architecture averages sorted by mean.")
 
-    # ROC table
-    print("\n📊 ROC-AUC Scores:")
-    roc_header = f"{'Architecture':<20}"
-    for ft in food_types:
-        roc_header += f"  {ft:>{col}}"
-    roc_header += f"  {'Average':>{col}}"
-    print(roc_header)
-    print("─" * len(roc_header))
+    _metric_table("ROC-AUC Scores", all_results, food_types, "roc_auc", arrow="📊")
+    _metric_table("PR-AUC Scores", all_results, food_types, "pr_auc", arrow="📊")
+    _metric_table("F1 @ 95% TNR", all_results, food_types, "f1_tnr95", arrow="📊")
+    _metric_table("Accuracy @ 95% TNR", all_results, food_types, "acc_tnr95", arrow="📊")
 
-    # Calculate averages and sort
-    roc_avgs = {}
+    # Resource table: VRAM / params / FLOPs / inference time
+    col = 14
+    print(f"\n🖥  Resources (mean ± std across foods, {_n_seeds(all_results)} seeds):")
+    res_header = f"{'Architecture':<20}  {'Infer s':>{col}}  {'VRAM GB':>{col}}  {'Params M':>{col}}  {'GFLOPs':>{col}}"
+    print(res_header)
+    print("─" * len(res_header))
     for arch in archs:
-        scores = []
-        for ft in food_types:
-            r = all_results[arch].get(ft)
-            if r is not None:
-                if "original_model" in r:
-                    roc = r["original_model"].get("roc_auc")
-                else:
-                    roc = r.get("roc_auc")
-                if roc is not None and not np.isnan(roc):
-                    scores.append(roc)
-        roc_avgs[arch] = np.mean(scores) if scores else float("nan")
-
-    sorted_archs_roc = sorted(archs, key=lambda a: roc_avgs[a], reverse=True)
-
-    for arch in sorted_archs_roc:
         name = ARCH_DISPLAY_NAME.get(arch, arch)
-        row = f"{name:<20}"
-        for ft in food_types:
-            r = all_results[arch].get(ft)
-            if r is None:
-                row += f"  {'N/A':>{col}}"
-            elif "original_model" in r:
-                roc = r["original_model"]["roc_auc"]
-                roc_str = (
-                    f"{roc:>.4f}" if (roc is not None and not np.isnan(roc)) else "nan"
-                )
-                row += f"  {roc_str:>{col}}"
-            else:
-                roc = r.get("roc_auc")
-                roc_str = (
-                    f"{roc:>.4f}" if (roc is not None and not np.isnan(roc)) else "nan"
-                )
-                row += f"  {roc_str:>{col}}"
-        avg_str = f"{roc_avgs[arch]:>.4f}" if not np.isnan(roc_avgs[arch]) else "nan"
-        row += f"  {avg_str:>{col}}"
-        print(row)
-
-    # PR table
-    print("\n📊 PR-AUC Scores:")
-    pr_header = f"{'Architecture':<20}"
-    for ft in food_types:
-        pr_header += f"  {ft:>{col}}"
-    pr_header += f"  {'Average':>{col}}"
-    print(pr_header)
-    print("─" * len(pr_header))
-
-    # Calculate averages and sort
-    pr_avgs = {}
-    for arch in archs:
-        scores = []
-        for ft in food_types:
-            r = all_results[arch].get(ft)
-            if r is not None:
-                if "original_model" in r:
-                    pr = r["original_model"].get("pr_auc")
-                else:
-                    pr = r.get("pr_auc")
-                if pr is not None and not np.isnan(pr):
-                    scores.append(pr)
-        pr_avgs[arch] = np.mean(scores) if scores else float("nan")
-
-    sorted_archs_pr = sorted(archs, key=lambda a: pr_avgs[a], reverse=True)
-
-    for arch in sorted_archs_pr:
-        name = ARCH_DISPLAY_NAME.get(arch, arch)
-        row = f"{name:<20}"
-        for ft in food_types:
-            r = all_results[arch].get(ft)
-            if r is None:
-                row += f"  {'N/A':>{col}}"
-            elif "original_model" in r:
-                pr = r["original_model"]["pr_auc"]
-                pr_str = (
-                    f"{pr:>.4f}" if (pr is not None and not np.isnan(pr)) else "nan"
-                )
-                row += f"  {pr_str:>{col}}"
-            else:
-                pr = r.get("pr_auc")
-                pr_str = (
-                    f"{pr:>.4f}" if (pr is not None and not np.isnan(pr)) else "nan"
-                )
-                row += f"  {pr_str:>{col}}"
-        avg_str = f"{pr_avgs[arch]:>.4f}" if not np.isnan(pr_avgs[arch]) else "nan"
-        row += f"  {avg_str:>{col}}"
-        print(row)
+        infer = _res_cell(all_results, arch, "infer_time_sec")
+        vram = _res_cell(all_results, arch, "max_vram_gb")
+        params = _res_cell(all_results, arch, "n_params", div=1e6)
+        flops = _res_cell(all_results, arch, "gflops")
+        print(f"{name:<20}  {infer:>{col}}  {vram:>{col}}  {params:>{col}}  {flops:>{col}}")
 
     print()
 
@@ -438,6 +498,13 @@ Examples:
         action="store_true",
         help="Skip running, load existing JSON results and regenerate plots only",
     )
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of seeds to average results over (default: 5)",
+    )
     args = parser.parse_args()
 
     # ── food types ──────────────────────────────────────────────────────
@@ -503,6 +570,7 @@ Examples:
     print(f"  Architectures : {', '.join(archs)}")
     print(f"  Food types    : {', '.join(food_types)}")
     print(f"  Retrain       : {args.retrain}")
+    print(f"  Seeds         : {args.seeds}")
     print(f"  Output dir    : {args.output_dir}")
     print(f"{'=' * 80}")
 
@@ -512,7 +580,8 @@ Examples:
 
     for arch in archs:
         arch_start = time.time()
-        all_results[arch] = run_arch(arch, food_types, args.output_dir, extra_kwargs, args.cooldown)
+        all_results[arch] = run_arch(arch, food_types, args.output_dir, extra_kwargs,
+                                     args.cooldown, n_seeds=args.seeds)
         elapsed = time.time() - arch_start
         print(f"\n⏱  [{arch}] total wall time: {elapsed:.1f}s")
 

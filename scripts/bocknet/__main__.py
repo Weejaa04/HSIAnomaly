@@ -30,6 +30,7 @@ if hasattr(torch, 'set_float32_matmul_precision'):
 from .model import BockNet
 from .data import get_food_data
 from .utils import SEED_DICT, UniversalEarlyStopping
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ def benchmark_food_type(
         patience = 50
         min_delta = 1e-4
 
-    seed = SEED_DICT.get(food_type, 42)
+    seed = kwargs.get('seed', SEED_DICT.get(food_type, 42))
     set_seed(seed)
 
     # ===== Load data =====
@@ -231,6 +232,8 @@ def benchmark_food_type(
     HSI_new = TensorToHSI(img_new)
 
     roc_auc, pr_auc, detectmap, fpr, tpr, precision, recall = get_auc(HSI_old, HSI_new, gt)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(detectmap.flatten(), gt.flatten())
+    gflops = count_flops(net, img_tensor)
 
     print(
         f"ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}  Inference time={infer_time:.4f}s  Peak VRAM={peak_vram_mib:.1f} MiB"
@@ -259,6 +262,9 @@ def benchmark_food_type(
         "infer_time_sec": infer_time,
         "n_params": params_total,
         "max_vram_gb": round(peak_vram_mib / 1024, 4),
+        "f1_tnr95": f1_tnr95,
+        "acc_tnr95": acc_tnr95,
+        "gflops": gflops,
         "fpr": fpr,
         "tpr": tpr,
         "precision": precision,

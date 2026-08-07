@@ -33,6 +33,7 @@ from scripts.dms2f.utils import (
     get_spatial_train_val_mask, get_random_train_val_mask,
 )
 from scripts.dms2f.model import AnomalyDetectionModel
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 SEED = 42
 
@@ -211,7 +212,7 @@ def benchmark_food_type(food_type, **kwargs):
     suffix = '_random' if split_method == 'random' else ''
     suffix += kwargs.get('noise_suffix', '')
 
-    set_seed(SEED)
+    set_seed(kwargs.get('seed', SEED))
     print(f"\n{'=' * 70}")
     print(f"BENCHMARKING: {food_type} (DMS2F-HAD, split_method={split_method})")
     print(f"{'=' * 70}")
@@ -433,6 +434,8 @@ def benchmark_food_type(food_type, **kwargs):
     precision, recall, _ = precision_recall_curve(label_1d, score_1d)
     pr_auc = auc(recall, precision)
     fpr, tpr, _ = roc_curve(label_1d, score_1d)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(score_1d, label_1d)
+    gflops = count_flops(model, torch.zeros(1, B, BLOCK_SIZE, BLOCK_SIZE, device=device))
 
     # Median filter post-processing (matching other archs)
     residual_smooth = median_filter(score_1d, size=5)
@@ -465,6 +468,9 @@ def benchmark_food_type(food_type, **kwargs):
         'infer_time_sec': infer_time,
         'n_params': n_params,
         'max_vram_gb': max_vram_gb,
+        'f1_tnr95': f1_tnr95,
+        'acc_tnr95': acc_tnr95,
+        'gflops': gflops,
         'fpr': fpr.tolist(),
         'tpr': tpr.tolist(),
         'precision': precision.tolist(),

@@ -53,6 +53,7 @@ from scripts.sglnet.utils import (
 )
 from scripts.sglnet.model import SGLNetAE
 from scripts.sglnet.data import HSIPatchDataset
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 SEED = 42
 
@@ -236,6 +237,7 @@ def benchmark_food_type(
     print(f"{'=' * 80}")
     suffix = '_random' if split_method == 'random' else ''
     suffix += kwargs.get('noise_suffix', '')
+    set_seed(kwargs.get('seed', SEED))
 
     total_start_time = time.time()
     if torch.cuda.is_available():
@@ -348,6 +350,8 @@ def benchmark_food_type(
     )
 
     roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(scores, binary_labels)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(scores, binary_labels)
+    gflops = count_flops(model, torch.zeros(1, B, patch_size, patch_size, device=device))
 
     max_vram_gb = 0.0
     if torch.cuda.is_available():
@@ -379,6 +383,9 @@ def benchmark_food_type(
         "infer_time_sec": float(infer_time),
         "n_params": int(total_params),
         "max_vram_gb": float(max_vram_gb),
+        "f1_tnr95": f1_tnr95,
+        "acc_tnr95": acc_tnr95,
+        "gflops": gflops,
         "fpr": fpr,
         "tpr": tpr,
         "precision": precision,

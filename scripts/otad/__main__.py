@@ -28,6 +28,7 @@ if hasattr(torch, 'set_float32_matmul_precision'):
 
 from .model import OTADNet, OTADDataset, BlockRestore
 from .utils import get_food_data, SEED_DICT, UniversalEarlyStopping
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 ALL_FOOD_TYPES = ["Almond", "Pistachio", "GarlicStems"]
 
@@ -104,7 +105,7 @@ def benchmark_food_type(
         min_delta = 1e-4
         max_iterations = 150
 
-    seed = SEED_DICT.get(food_type, 42)
+    seed = kwargs.get('seed', SEED_DICT.get(food_type, 42))
     set_seed(seed)
 
     img_tensor, gt, H, W, B, train_mask, val_mask = get_food_data(food_type, base_dir, device=device, split_method=split_method)
@@ -244,6 +245,8 @@ def benchmark_food_type(
     pr_auc = average_precision_score(labels_flat, scores_flat)
     fpr, tpr, _ = roc_curve(labels_flat, scores_flat)
     precision, recall, _ = precision_recall_curve(labels_flat, scores_flat)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(scores_flat, labels_flat)
+    gflops = count_flops(net, torch.zeros(1, B, block_size, block_size, device=device))
 
     print(
         f"ROC-AUC={roc_auc:.4f}  PR-AUC={pr_auc:.4f}  Inference time={infer_time:.4f}s  Peak VRAM={peak_vram_mib:.1f} MiB"
@@ -272,6 +275,9 @@ def benchmark_food_type(
         "infer_time_sec": infer_time,
         "n_params": params_total,
         "max_vram_gb": round(peak_vram_mib / 1024, 4),
+        "f1_tnr95": f1_tnr95,
+        "acc_tnr95": acc_tnr95,
+        "gflops": gflops,
         "fpr": fpr.tolist(),
         "tpr": tpr.tolist(),
         "precision": precision.tolist(),

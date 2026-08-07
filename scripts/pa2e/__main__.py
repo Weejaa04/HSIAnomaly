@@ -41,6 +41,7 @@ from scripts.pa2e.utils import (
 )
 from scripts.pa2e.model import PA2E, PA2EFT
 from scripts.pa2e.data import HSIPixelDataset
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SEED & DEVICE
@@ -301,6 +302,7 @@ def benchmark_food_type(food_type: str,
     dry_run = kwargs.get('dry_run', dry_run)
     retrain = kwargs.get('retrain', retrain)
     split_method = kwargs.get('split_method', split_method)
+    set_seed(kwargs.get('seed', SEED))
     suffix = '_random' if split_method == 'random' else ''
     suffix += kwargs.get('noise_suffix', '')
     
@@ -430,6 +432,8 @@ def benchmark_food_type(food_type: str,
     
     # ─── Evaluation ─────────────────────────────────────────────────────────
     roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(smoothed_scores, binary_labels)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(smoothed_scores, binary_labels)
+    gflops = count_flops(model_ft, torch.zeros(1, B, device=device))
     
     # Calculate memory stats
     max_vram_gb = 0.0
@@ -461,6 +465,9 @@ def benchmark_food_type(food_type: str,
         'infer_time_sec': float(infer_time),
         'n_params': int(total_params),
         'max_vram_gb': float(max_vram_gb),
+        'f1_tnr95': f1_tnr95,
+        'acc_tnr95': acc_tnr95,
+        'gflops': gflops,
         'fpr': fpr,
         'tpr': tpr,
         'precision': precision,

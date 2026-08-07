@@ -93,15 +93,12 @@ ABLATION_AXES = {
 
 # ── 6. Loss Weights (alpha × beta) ─────────────────────────────────────────────
 # Phase 2 loss = alpha * center_loss + beta * recon_loss.
-# Baseline default is alpha=1.0, beta=0.5, i.e. loss = center_loss + 0.5 * recon_loss.
+# Default (best from grid) is alpha=0.2, beta=1.0.
 
 WEIGHT_GRID = [0.2, 0.4, 0.6, 0.8, 1.0]
 
 def _build_weight_variants():
-    variants = {
-        "weight_baseline": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
-                            "loss": "mse", "scoring": "nnmb", "alpha": 1.0, "beta": 0.5},  # BASELINE
-    }
+    variants = {}
     for alpha in WEIGHT_GRID:
         for beta in WEIGHT_GRID:
             variants[f"weight_a{alpha:.1f}_b{beta:.1f}"] = {
@@ -136,18 +133,26 @@ ABLATION_AXES.update(PP_AXES)
 
 PHASE_AXES = {
     "phase_both":  {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
-                    "loss": "mse", "scoring": "nnmb", "phase1": True},   # BASELINE
+                    "loss": "mse", "scoring": "nnmb", "phase1": True, "phase2":True, "center": True},   # BASELINE
     "phase_no_p1": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
-                    "loss": "mse", "scoring": "nnmb", "phase1": False},
+                    "loss": "mse", "scoring": "nnmb", "phase1": False, "phase2":True, "center": True },
+    "phase_p2_no_center": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                "loss": "mse", "scoring": "nnmb", "phase1": True, "phase2":True, "center": False},
+    "phase_no_p2": {"calib": "mean_per_column", "partial": True, "encoder": "cnn",
+                    "loss": "mse", "scoring": "nnmb", "phase1": True, "phase2":False, "center": False},
+
+    
+
+    
 }
 ABLATION_AXES.update(PHASE_AXES)
 
 # Deduplicated set of actually distinct configs (avoids re-training the baseline 5 times)
 # Key = canonical config tuple; value = list of variant names sharing that config
 def _config_key(cfg):
-    return (cfg["calib"], cfg["partial"], cfg["encoder"], cfg["loss"], cfg["scoring"],
-            cfg.get("alpha", 1.0), cfg.get("beta", 0.5), cfg.get("median_kernel", 3),
-            cfg.get("phase1", True))
+    return (cfg["calib"], cfg["partial"], cfg["encoder"], cfg["loss"], cfg["scoring"], cfg["center"],
+            cfg.get("alpha", 0.2), cfg.get("beta", 1.0), cfg.get("median_kernel", 3),
+            cfg.get("phase1", True), cfg.get("phase2", True))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -248,6 +253,8 @@ def train_phase2(model, train_loader, val_loader, num_epochs, lr, alpha, beta, l
             z, recon, target = _get_windows_or_full(model, x)
             r_loss = recon_loss_fn(recon, target, loss_type)
             c_loss = torch.mean(torch.sum((z - model.center) ** 2, dim=1))
+            
+            #print ("no center loss: alpha", alpha)
             loss = alpha * c_loss + beta * r_loss
 
             loss.backward()
@@ -458,17 +465,34 @@ def run_variant(variant_name, cfg, food_type, base_path, dry_run, retrain):
         else:
             model_ft = model
 
-        _, _, _, _, converged_epoch = train_phase2(
-            model_ft, train_loader, val_loader,
-            num_epochs=num_epochs_p2,
-            lr=1e-3,
-            alpha=cfg.get("alpha", 1.0),
-            beta=cfg.get("beta", 0.5),
-            loss_type=cfg["loss"],
-            food_type=food_type,
-            variant_name=variant_name,
-            dry_run=dry_run,
-        )
+        if cfg.get ("phase2",True):
+            if cfg.get("center",True):
+                print ("using center")
+                _, _, _, _, converged_epoch = train_phase2(
+                    model_ft, train_loader, val_loader,
+                    num_epochs=num_epochs_p2,
+                    lr=1e-3,
+                    alpha=cfg.get("alpha", 0.2),
+                    beta=cfg.get("beta", 1.0),
+                    loss_type=cfg["loss"],
+                    food_type=food_type,
+                    variant_name=variant_name,
+                    dry_run=dry_run)
+            else:
+                print ("no center")
+                _, _, _, _, converged_epoch = train_phase2(
+                    model_ft, train_loader, val_loader,
+                    num_epochs=num_epochs_p2,
+                    lr=1e-3,
+                    alpha=cfg.get("alpha", 0),
+                    beta=cfg.get("beta", 1.0),
+                    loss_type=cfg["loss"],
+                    food_type=food_type,
+                    variant_name=variant_name,
+                    dry_run=dry_run)
+        else:
+            print ('\n=== Skipping Phase 2 (no phase2) ===')
+            
         train_time_sec = time.time() - training_start
 
     # ── Inference ──────────────────────────────────────────────────────────────

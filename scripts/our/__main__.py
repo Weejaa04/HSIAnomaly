@@ -41,6 +41,7 @@ from scripts.our.utils import (
 )
 from scripts.our.model import PA2E, PA2EFT
 from scripts.our.data import HSIPixelDataset
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SEED & DEVICE
@@ -153,7 +154,7 @@ def initialize_center(model, train_loader):
     return center
 
 
-def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.5, food_type=None, suffix=''):
+def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha=0.2, beta=1.0, food_type=None, suffix=''):
     """
     Phase 2: DSVDD-style manifold refinement + CosineAnnealingLR + Early Stopping.
     
@@ -195,7 +196,7 @@ def train_phase2(model, train_loader, val_loader, num_epochs=500, lr=1e-4, alpha
             
             recon_loss, z = compute_reconstruction_loss(model, x)
             center_loss = torch.mean(torch.sum((z - model.center) ** 2, dim=1))
-            loss = center_loss + alpha * recon_loss
+            loss = alpha * center_loss + beta * recon_loss
             
             loss.backward()
             optimizer.step()
@@ -325,6 +326,7 @@ def benchmark_food_type(food_type, **kwargs):
     dry_run = kwargs.get('dry_run', False)
     retrain = kwargs.get('retrain', True)
     split_method = kwargs.get('split_method', 'spatial')
+    set_seed(kwargs.get('seed', SEED))
     suffix = '_random' if split_method == 'random' else ''
     suffix += kwargs.get('noise_suffix', '')
     print(f"\n{'='*80}")
@@ -441,7 +443,7 @@ def benchmark_food_type(food_type, **kwargs):
         # ── Phase 2: DSVDD-style Training with Early Stopping ──────────────────
         model_ft = PA2EFT(model).to(device)
         phase2_losses, phase2_center_losses, phase2_recon_losses, phase2_val_losses = train_phase2(
-            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.5, food_type=food_type, suffix=suffix
+            model_ft, train_loader, val_loader, num_epochs=num_epochs_p2, lr=1e-3, alpha=0.2, beta=1.0, food_type=food_type, suffix=suffix
         )
         train_time_sec = time.time() - training_start
     else:
@@ -458,6 +460,8 @@ def benchmark_food_type(food_type, **kwargs):
     
     # ─── Evaluation ─────────────────────────────────────────────────────────
     roc_auc, pr_auc, fpr, tpr, precision, recall = evaluate(smoothed_scores, binary_labels)
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(smoothed_scores, binary_labels)
+    gflops = count_flops(model_ft, torch.zeros(1, B, device=device))
     
     # Calculate memory stats
     max_vram_gb = 0.0
@@ -489,6 +493,9 @@ def benchmark_food_type(food_type, **kwargs):
         'infer_time_sec': float(infer_time),
         'n_params': int(total_params),
         'max_vram_gb': float(max_vram_gb),
+        'f1_tnr95': f1_tnr95,
+        'acc_tnr95': acc_tnr95,
+        'gflops': gflops,
         'fpr': fpr,
         'tpr': tpr,
         'precision': precision,

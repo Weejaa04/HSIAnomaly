@@ -36,6 +36,7 @@ from .utils import (
     load_weights,
     weights_exist,
 )
+from scripts.metrics import f1_acc_at_tnr95, count_flops
 
 SEED = 42
 
@@ -101,6 +102,7 @@ def benchmark_food_type(
     """
     suffix = '_random' if split_method == 'random' else ''
     suffix += kwargs.get('noise_suffix', '')
+    set_all_seeds(kwargs.get('seed', SEED))
     print(f"\n{'=' * 70}")
     print(f"SUPERAD BENCHMARK: {food_type} (split_method={split_method})")
     print(f"{'=' * 70}")
@@ -247,6 +249,8 @@ def benchmark_food_type(
     pr_auc = average_precision_score(binary_labels, detectmap.flatten())
     fpr, tpr, _ = roc_curve(binary_labels, detectmap.flatten())
     precision, recall, _ = precision_recall_curve(binary_labels, detectmap.flatten())
+    f1_tnr95, acc_tnr95 = f1_acc_at_tnr95(detectmap.flatten(), binary_labels)
+    gflops = count_flops(model, test_data, segments, last_loss)
 
     peak_vram_mib = (
         torch.cuda.max_memory_allocated(device) / 1024**2
@@ -280,6 +284,9 @@ def benchmark_food_type(
         "infer_time_sec": float(infer_time),
         "n_params": int(total_params),
         "max_vram_gb": float(max_vram_gb),
+        "f1_tnr95": f1_tnr95,
+        "acc_tnr95": acc_tnr95,
+        "gflops": gflops,
         "fpr": fpr.tolist(),
         "tpr": tpr.tolist(),
         "precision": precision.tolist(),

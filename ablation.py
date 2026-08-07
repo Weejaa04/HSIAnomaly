@@ -8,7 +8,7 @@ Ablation axes:
   3. Loss function    : mse (★) | mae
   4. Scoring method   : nnmb (★) | dsvdd
   5. Partial windows  : partial (★) | non_partial_cnn | non_partial_linear
-  6. Loss weights     : alpha × beta grid {0.2..1.0 step 0.2} + baseline 1.0 × 0.5 (★)
+  6. Loss weights     : alpha × beta grid {0.2..1.0 step 0.2}, default α=0.2 × β=1.0 (★)
   7. Post-processing  : median kernel none | 3x3 (★) | 5x5 | 7x7
   8. Training phases  : phase1 + phase2 (★) | phase2 only (no phase 1)
 
@@ -65,10 +65,10 @@ ABLATION_GROUPS = {
         ("partial_no_linear",  "Non-Partial (Linear)"),
     ],
     "6. Loss Weights": [
-        ("weight_baseline", "Baseline: α=1.0 × β=0.5 ★"),
+        ("weight_a0.2_b1.0", "α=0.2 × β=1.0 ★ (default)"),
     ] + [
         (f"weight_a{a:.1f}_b{b:.1f}", f"α={a:.1f} × β={b:.1f}")
-        for a in WEIGHT_GRID for b in WEIGHT_GRID
+        for a in WEIGHT_GRID for b in WEIGHT_GRID if not (a == 0.2 and b == 1.0)
     ],
     "7. Post-Processing": [
         ("pp_zero", "No median smoothing"),
@@ -79,6 +79,9 @@ ABLATION_GROUPS = {
     "8. Training Phases": [
         ("phase_both",  "Phase 1 + Phase 2 ★"),
         ("phase_no_p1", "No Phase 1 (Phase 2 only)"),
+        ("phase_p2_no_center", "Phase 1 + Phase 2 (no center loss)"),
+        ("phase_no_p2", "Phase 1 (no Phase 2)"),
+
     ],
 }
 

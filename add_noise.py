@@ -77,14 +77,17 @@ def add_stripe(data, rng):
 
     covered = 0
     while covered < target:
-        col = rng.integers(w)
+        col = int(rng.integers(w))
         width = int(rng.integers(STRIPE_MIN_WIDTH, STRIPE_MAX_WIDTH + 1))
         cols = np.arange(col, min(col + width, w))
         cols = cols[~mask[:, cols].any(axis=0)]
         if cols.size == 0:
             continue
-        if covered + h * cols.size > target:
-            cols = cols[: (target - covered) // h]
+        remaining = target - covered
+        if h * cols.size > remaining:
+            cols = cols[: (remaining + h - 1) // h]
+        if cols.size == 0:
+            continue
         for c in cols:
             offset = rng.normal(0.0, 1.0, size=bands) * sigma
             noisy[:, c, :] += offset

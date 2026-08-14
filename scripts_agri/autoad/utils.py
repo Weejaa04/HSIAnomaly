@@ -1,3 +1,4 @@
+"""AgriFood-adapted data loading for AutoAD (trains on Train/ cube, tests on Test/ cube)."""
 import numpy as np
 import torch
 
@@ -5,6 +6,7 @@ SEED_DICT = {
     "Almond": 42,
     "Pistachio": 42,
     "GarlicStems": 42,
+    "AgriFood": 42,
 }
 
 
@@ -40,7 +42,7 @@ def load_hsi_data(data_path: str) -> np.ndarray:
 def calibrate_hsi(
     data: np.ndarray, white_ref_path: str, dark_ref_path: str
 ) -> np.ndarray:
-    """Calibrate HSI data using white-dark correction."""
+    """Calibrate HSI data using white-dark correction (identity for AgriFood)."""
     import spectral
 
     white = np.array(spectral.open_image(white_ref_path).load(), dtype=np.float32).mean(
@@ -53,48 +55,51 @@ def calibrate_hsi(
 
 
 def get_random_train_val_mask(H, W, seed=42):
-    """Generate random masks for training and validation.
-    
-    Random Sampling: 37.5% train, 12.5% val, remaining unlabeled.
-    
-    Args:
-        H, W: Image height and width
-        seed: Random seed for reproducibility
-    
-    Returns:
-        train_mask: (H, W) boolean mask for training
-        val_mask: (H, W) boolean mask for validation
-    """
+    """Random sampling: 37.5% train, 12.5% val, remaining unlabeled."""
     np.random.seed(seed)
     rand_map = np.random.rand(H, W)
-    
+
     train_mask = rand_map < 0.375
     val_mask = (rand_map >= 0.375) & (rand_map < 0.500)
-    
+
     train_mask = torch.from_numpy(train_mask).float()
     val_mask = torch.from_numpy(val_mask).float()
-    
+
     return train_mask, val_mask
 
 
-def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", device=None, split_method: str = "spatial"):
-    """Load, calibrate and return data for a food type.
+def scale_spatial_rows(H):
+    """Spatial guillotine rows scaled by image height (H=400 -> 50:200 / 300:350)."""
+    return (round(0.125 * H), round(0.5 * H)), (round(0.75 * H), round(0.875 * H))
 
-    Args:
-        food_type: Food type name
-        base_dir: Base directory for data
-        device: Torch device
-        split_method: "spatial" (guillotine) or "random" (random sampling)
+
+def get_food_data(food_type: str = "AgriFood", base_dir: str = "AgriFood/Dataset", device=None, split_method: str = "spatial"):
+    """AgriFood protocol: train on the Train/ cube, infer on the Test/ cube.
 
     Returns:
-        img_var: (1, B, H, W) tensor
-        gt: (H, W) binary ground truth
-        H, W, B: spatial and spectral dimensions
-        train_mask: (H, W) mask for training region
-        val_mask: (H, W) mask for validation region
+        img_train: (1, B, Ht, Wt) training cube tensor (Normal_3)
+        img_var: (1, B, H, W) test cube tensor (anomaly scene)
+        gt: (H, W) binary ground truth from Test/label.npy
+        H, W, B: test cube spatial/spectral dims
+        train_mask, val_mask: scaled guillotine masks over the train cube
     """
     base = f"{base_dir}/{food_type}"
 
+    # Train cube (All-Normal: UseCase_1_(Avoine1)_Normal_3)
+    train_data = calibrate_hsi(
+        load_hsi_data(f"{base}/Train/data.hdr"),
+        f"{base}/Train/WHITEREF.hdr",
+        f"{base}/Train/DARKREF.hdr",
+    )
+    Ht, Wt = train_data.shape[:2]
+    train_np = train_data.transpose(2, 0, 1)
+    train_np = (train_np - train_np.min()) / (train_np.max() - train_np.min() + 1e-8)
+    img_train = torch.from_numpy(train_np).float()
+    if device is not None:
+        img_train = img_train.to(device)
+    img_train = img_train.unsqueeze(0)
+
+    # Test cube (anomaly scene) + ground truth
     test_data = calibrate_hsi(
         load_hsi_data(f"{base}/Test/data.hdr"),
         f"{base}/Test/WHITEREF.hdr",
@@ -113,26 +118,18 @@ def get_food_data(food_type: str, base_dir: str = "AnomalyonFood/Dataset", devic
         img_var = img_var.to(device)
     img_var = img_var.unsqueeze(0)
 
-    # Generate masks based on split method
+    # Scaled spatial guillotine masks over the train cube
     if split_method == "random":
-        train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
-    else:  # spatial (guillotine)
-        train_y_start, train_y_end = round(0.125 * H), round(0.5 * H)
-        val_y_start, val_y_end = round(0.75 * H), round(0.875 * H)
-        train_mask = torch.zeros((H, W), dtype=torch.float32)
-        train_mask[train_y_start:train_y_end, :] = 1.0
-        val_mask = torch.zeros((H, W), dtype=torch.float32)
-        val_mask[val_y_start:val_y_end, :] = 1.0
-    
+        train_mask, val_mask = get_random_train_val_mask(Ht, Wt, seed=42)
+    else:
+        (ty0, ty1), (vy0, vy1) = scale_spatial_rows(Ht)
+        train_mask = torch.zeros((Ht, Wt), dtype=torch.float32)
+        train_mask[ty0:ty1, :] = 1.0
+        val_mask = torch.zeros((Ht, Wt), dtype=torch.float32)
+        val_mask[vy0:vy1, :] = 1.0
+
     if device is not None:
         train_mask = train_mask.to(device)
         val_mask = val_mask.to(device)
 
-    return img_var, gt, H, W, B, train_mask, val_mask
-
-
-def get_noise(input_depth, method, shape):
-    if method == "noise":
-        return torch.randn((1, input_depth, shape[0], shape[1])).normal_()
-    else:
-        return torch.zeros((1, input_depth, shape[0], shape[1]))
+    return img_train, img_var, gt, H, W, B, train_mask, val_mask

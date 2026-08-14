@@ -143,11 +143,14 @@ def get_food_data(food_type, base_dir, n_segments=500, compactness=10, split_met
 
 
 def get_spatial_train_val_masks(H=400, W=512):
+    train_y_start, train_y_end = round(0.125 * H), round(0.5 * H)
+    val_y_start, val_y_end = round(0.75 * H), round(0.875 * H)
+
     train_mask = np.zeros((H, W), dtype=np.float32)
     val_mask = np.zeros((H, W), dtype=np.float32)
 
-    train_mask[50:200, :] = 1.0
-    val_mask[300:350, :] = 1.0
+    train_mask[train_y_start:train_y_end, :] = 1.0
+    val_mask[val_y_start:val_y_end, :] = 1.0
 
     train_mask = torch.from_numpy(train_mask).unsqueeze(0).unsqueeze(0)
     val_mask = torch.from_numpy(val_mask).unsqueeze(0).unsqueeze(0)

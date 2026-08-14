@@ -4,3 +4,7 @@ weights
 .ruff_cache
 results
 AnomalyonFood.zip
+AgriFood.zip
+AgriFood
+AgriFoodAnomaly
+results_agri

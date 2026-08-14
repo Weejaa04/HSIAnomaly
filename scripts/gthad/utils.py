@@ -64,23 +64,29 @@ def calibrate_hsi(data, white_ref_path, dark_ref_path):
 def get_spatial_train_val_mask(H=400, W=512):
     """
     Get spatial guillotine masks for train and validation zones.
-    
-    Protocol:
-        Y[0:50]:     Discarded (sensor startup noise)
-        Y[50:200]:   Train block (150 rows)
-        Y[200:300]:  Dead zone (buffer)
-        Y[300:350]:  Val block (50 rows)
-        Y[350:400]:  Remaining (test zone)
-    
+
+    Protocol (percentages of H):
+        Y[0:12.5%]:        Discarded (sensor startup noise)
+        Y[12.5%:50%]:      Train block (37.5% of rows)
+        Y[50%:75%]:        Dead zone (buffer)
+        Y[75%:87.5%]:      Val block (12.5% of rows)
+        Y[87.5%:H]:        Remaining (test zone)
+
+    For H=400 this equals the classic Y[50:200] / Y[300:350]; larger cubes
+    (e.g. AgriFood, H=1000) scale to Y[125:500] / Y[750:875].
+
     Returns:
         train_mask: (H, W) boolean mask
         val_mask: (H, W) boolean mask
     """
+    train_y_start, train_y_end = round(0.125 * H), round(0.5 * H)
+    val_y_start, val_y_end = round(0.75 * H), round(0.875 * H)
+
     train_mask = np.zeros((H, W), dtype=bool)
-    train_mask[50:200, :] = True
+    train_mask[train_y_start:train_y_end, :] = True
     
     val_mask = np.zeros((H, W), dtype=bool)
-    val_mask[300:350, :] = True
+    val_mask[val_y_start:val_y_end, :] = True
     
     return train_mask, val_mask
 

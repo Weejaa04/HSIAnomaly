@@ -76,10 +76,12 @@ def get_food_data(food_type: str, base_dir: str = 'AnomalyonFood/Dataset', devic
     if split_method == "random":
         train_mask, val_mask = get_random_train_val_mask(H, W, seed=42)
     else:  # spatial (guillotine)
+        train_y_start, train_y_end = round(0.125 * H), round(0.5 * H)
+        val_y_start, val_y_end = round(0.75 * H), round(0.875 * H)
         train_mask = torch.zeros((H, W), dtype=torch.float32)
-        train_mask[50:200, :] = 1.0
+        train_mask[train_y_start:train_y_end, :] = 1.0
         val_mask = torch.zeros((H, W), dtype=torch.float32)
-        val_mask[300:350, :] = 1.0
+        val_mask[val_y_start:val_y_end, :] = 1.0
     
     if device is not None:
         train_mask = train_mask.to(device)

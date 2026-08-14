@@ -63,20 +63,32 @@ def calibrate_hsi(data, white_ref_path, dark_ref_path):
     return calibrated
 
 
-def get_spatial_train_val_mask(H=400, W=512, train_y_start=50, train_y_end=200, 
-                               val_y_start=300, val_y_end=350):
+def get_spatial_train_val_mask(H=400, W=512, train_y_start=None, train_y_end=None, 
+                               val_y_start=None, val_y_end=None):
     """
     Generate spatial masks for training and validation blocks.
     
-    Following DATA.md spatial guillotine protocol:
-    - Train Block: Y[50:200]
-    - Dead Zone: Y[200:300]
-    - Val Block: Y[300:350]
+    Following DATA.md spatial guillotine protocol (percentages of H):
+    - Train Block: Y[12.5%:50%]   (37.5% of rows)
+    - Dead Zone  : Y[50%:75%]
+    - Val Block  : Y[75%:87.5%]   (12.5% of rows)
+
+    For H=400 this equals the classic Y[50:200] / Y[300:350]; larger cubes
+    (e.g. AgriFood, H=1000) scale to Y[125:500] / Y[750:875].
     
     Returns:
         train_mask: shape (H*W,), boolean array for train pixels
         val_mask: shape (H*W,), boolean array for val pixels
     """
+    if train_y_start is None:
+        train_y_start = round(0.125 * H)
+    if train_y_end is None:
+        train_y_end = round(0.5 * H)
+    if val_y_start is None:
+        val_y_start = round(0.75 * H)
+    if val_y_end is None:
+        val_y_end = round(0.875 * H)
+    
     train_mask = np.zeros(H * W, dtype=bool)
     val_mask = np.zeros(H * W, dtype=bool)
     

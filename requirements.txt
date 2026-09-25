@@ -1,0 +1,20 @@
+# Core Python script dependencies
+numpy
+torch
+scipy
+scikit-learn
+spectral
+tqdm
+matplotlib
+Pillow
+scikit-image
+einops
+
+# Optional profiler and accelerated Mamba dependencies
+thop
+mamba-ssm
+causal-conv1d
+
+# Dependencies used by the Experiment notebooks
+pandas
+umap-learn
